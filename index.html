@@ -1,157 +1,169 @@
-<!-- test deploy -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>UK Police Data Dashboard • GitHub Pages Demo</title>
+  <title>UK Police Dashboard • v2</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    #map { height: 520px; border-radius: 12px; }
+    .dark .leaflet-popup-content-wrapper { background: #1f2937; color: #e5e7eb; }
     .crime-row:hover { background-color: #f8fafc; }
-    .marker-popup { font-size: 13px; line-height: 1.4; }
+    .dark .crime-row:hover { background-color: #374151; }
   </style>
 </head>
-<body class="bg-slate-50">
-  <div class="max-w-[1400px] mx-auto">
-    <!-- Header -->
-    <div class="flex items-center justify-between px-8 py-6 border-b bg-white">
-      <div>
-        <h1 class="text-3xl font-semibold tracking-tight">UK Police Data Dashboard</h1>
-        <p class="text-slate-500 text-sm mt-1">Live data from <a href="https://data.police.uk" target="_blank" class="text-blue-600 hover:underline">data.police.uk</a> • Hosted on GitHub Pages</p>
-      </div>
+<body class="bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+  <div class="max-w-[1480px] mx-auto">
+    <!-- Top Bar -->
+    <div class="flex items-center justify-between px-8 py-5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
       <div class="flex items-center gap-3">
-        <div id="last-updated" class="text-xs px-3 py-1.5 bg-slate-100 rounded-full text-slate-600"></div>
-        <button onclick="loadData()" 
-                class="px-5 py-2.5 bg-slate-900 hover:bg-black text-white text-sm font-medium rounded-xl flex items-center gap-2 transition-colors">
-          <span>Refresh Data</span>
+        <div class="w-9 h-9 bg-blue-600 rounded-2xl flex items-center justify-center text-white font-bold text-xl">P</div>
+        <div>
+          <div class="font-semibold text-2xl tracking-tight">UK Police Dashboard</div>
+          <div class="text-xs text-slate-500 -mt-1">data.police.uk • Live • GitHub Pages</div>
+        </div>
+      </div>
+      
+      <div class="flex items-center gap-4">
+        <div id="last-updated" class="text-xs px-3 py-1.5 bg-slate-200 dark:bg-slate-800 rounded-full"></div>
+        <button onclick="toggleDarkMode()" 
+                class="px-4 py-2 text-sm rounded-2xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+          🌓 Toggle Dark
         </button>
       </div>
     </div>
 
-    <div class="flex flex-col lg:flex-row gap-6 p-8">
+    <div class="flex gap-6 p-8">
       <!-- Sidebar Controls -->
-      <div class="lg:w-80 flex-shrink-0 bg-white rounded-3xl shadow-sm border p-6 space-y-6">
-        <div>
-          <label class="block text-xs font-semibold tracking-widest text-slate-500 mb-2">QUICK LOCATIONS</label>
+      <div class="w-80 flex-shrink-0 space-y-6">
+        <!-- Location Controls -->
+        <div class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 space-y-5">
+          <div class="font-semibold text-sm tracking-widest text-slate-500">LOCATION</div>
+          
           <div class="grid grid-cols-2 gap-2">
-            <button onclick="quickLocation(51.5074, -0.1278)" class="text-sm px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl transition">London</button>
-            <button onclick="quickLocation(53.4808, -2.2426)" class="text-sm px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl transition">Manchester</button>
-            <button onclick="quickLocation(52.4862, -1.8904)" class="text-sm px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl transition">Birmingham</button>
-            <button onclick="quickLocation(55.9533, -3.1883)" class="text-sm px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl transition">Edinburgh</button>
+            <button onclick="quickLocation(51.5074, -0.1278)" class="text-sm py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-2xl transition">London</button>
+            <button onclick="quickLocation(53.4808, -2.2426)" class="text-sm py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-2xl transition">Manchester</button>
+            <button onclick="quickLocation(52.4862, -1.8904)" class="text-sm py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-2xl transition">Birmingham</button>
+            <button onclick="quickLocation(55.9533, -3.1883)" class="text-sm py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-2xl transition">Edinburgh</button>
           </div>
-        </div>
 
-        <!-- Postcode Search -->
-        <div>
-          <label class="block text-xs font-semibold tracking-widest text-slate-500 mb-2">POSTCODE SEARCH</label>
-          <div class="flex gap-2">
-            <input id="postcode" type="text" placeholder="e.g. SW1A 1AA" 
-                   class="flex-1 px-4 py-2.5 border rounded-2xl text-sm focus:outline-none focus:border-slate-400">
-            <button onclick="searchPostcode()" 
-                    class="px-5 bg-white border hover:bg-slate-50 rounded-2xl text-sm font-medium transition">Go</button>
-          </div>
-        </div>
-
-        <!-- Manual Coordinates -->
-        <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block text-xs font-semibold tracking-widest text-slate-500 mb-1.5">LATITUDE</label>
-            <input id="lat" type="text" value="51.5074" class="w-full px-4 py-2.5 border rounded-2xl text-sm">
+            <div class="text-xs font-medium text-slate-500 mb-1.5">POSTCODE</div>
+            <div class="flex gap-2">
+              <input id="postcode" type="text" placeholder="SW1A 1AA" class="flex-1 px-4 py-2.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-2xl text-sm">
+              <button onclick="searchPostcode()" class="px-5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-2xl text-sm font-medium">Go</button>
+            </div>
           </div>
-          <div>
-            <label class="block text-xs font-semibold tracking-widest text-slate-500 mb-1.5">LONGITUDE</label>
-            <input id="lng" type="text" value="-0.1278" class="w-full px-4 py-2.5 border rounded-2xl text-sm">
-          </div>
-        </div>
 
-        <button onclick="useMyLocation()" 
-                class="w-full py-2.5 text-sm border border-slate-300 hover:bg-slate-50 rounded-2xl flex items-center justify-center gap-2">
-          📍 Use my current location
-        </button>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <div class="text-xs font-medium text-slate-500 mb-1">LAT</div>
+              <input id="lat" type="text" value="51.5074" class="w-full px-4 py-2.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-2xl text-sm">
+            </div>
+            <div>
+              <div class="text-xs font-medium text-slate-500 mb-1">LNG</div>
+              <input id="lng" type="text" value="-0.1278" class="w-full px-4 py-2.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-2xl text-sm">
+            </div>
+          </div>
+
+          <button onclick="useMyLocation()" class="w-full py-2.5 text-sm border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-2xl flex items-center justify-center gap-2">
+            📍 Use my location
+          </button>
+        </div>
 
         <!-- Filters -->
-        <div class="space-y-4 pt-2">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 space-y-4">
           <div>
-            <label class="block text-xs font-semibold tracking-widest text-slate-500 mb-1.5">CRIME CATEGORY</label>
-            <select id="category" class="w-full px-4 py-2.5 border rounded-2xl text-sm bg-white">
+            <div class="text-xs font-medium text-slate-500 mb-1.5">CRIME CATEGORY</div>
+            <select id="category" class="w-full px-4 py-2.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-2xl text-sm">
               <option value="all-crime">All Crime</option>
               <option value="anti-social-behaviour">Anti-social behaviour</option>
               <option value="burglary">Burglary</option>
-              <option value="criminal-damage-arson">Criminal damage & arson</option>
-              <option value="drugs">Drugs</option>
+              <option value="violent-crime">Violent crime</option>
+              <option value="vehicle-crime">Vehicle crime</option>
               <option value="other-theft">Other theft</option>
-              <option value="possession-of-weapons">Possession of weapons</option>
+              <option value="shoplifting">Shoplifting</option>
+              <option value="criminal-damage-arson">Criminal damage</option>
+              <option value="drugs">Drugs</option>
               <option value="public-order">Public order</option>
               <option value="robbery">Robbery</option>
-              <option value="shoplifting">Shoplifting</option>
-              <option value="theft-from-the-person">Theft from the person</option>
-              <option value="vehicle-crime">Vehicle crime</option>
-              <option value="violent-crime">Violent crime</option>
-              <option value="other-crime">Other crime</option>
             </select>
           </div>
 
           <div>
-            <label class="block text-xs font-semibold tracking-widest text-slate-500 mb-1.5">MONTH (optional — leave blank for latest)</label>
-            <input id="date" type="month" value="2025-01" class="w-full px-4 py-2.5 border rounded-2xl text-sm">
+            <div class="text-xs font-medium text-slate-500 mb-1.5">MONTH</div>
+            <input id="date" type="month" value="2025-03" class="w-full px-4 py-2.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-2xl text-sm">
           </div>
+
+          <button onclick="loadData()" 
+                  class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-2xl text-sm tracking-wider transition">
+            LOAD DATA
+          </button>
+
+          <button onclick="loadComparison()" 
+                  class="w-full py-2.5 text-sm border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-2xl">
+            Compare with previous month
+          </button>
         </div>
-
-        <button onclick="loadData()" 
-                class="w-full py-3.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold rounded-2xl text-sm tracking-wider transition">
-          LOAD POLICE DATA
-        </button>
-
-        <div id="status" class="text-center text-xs text-slate-500 min-h-[20px]"></div>
       </div>
 
       <!-- Main Content -->
       <div class="flex-1 min-w-0 space-y-6">
+        <!-- KPIs -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4" id="kpi-row"></div>
+
         <!-- Map -->
-        <div class="bg-white rounded-3xl shadow-sm border p-4">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-5">
           <div class="flex items-center justify-between mb-3 px-2">
             <div class="font-semibold">Crime Map <span id="map-subtitle" class="text-slate-400 text-sm font-normal"></span></div>
-            <div id="total-crimes" class="text-sm px-4 py-1 bg-slate-100 rounded-full font-medium"></div>
+            <div class="flex items-center gap-2 text-xs">
+              <div id="total-crimes" class="px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full font-medium"></div>
+              <button onclick="toggleHeatmap()" class="px-3 py-1 border border-slate-300 dark:border-slate-700 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800">Toggle Heatmap</button>
+            </div>
           </div>
-          <div id="map"></div>
+          <div id="map" class="h-[520px] rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700"></div>
         </div>
 
-        <!-- Stats + Chart -->
-        <div class="grid grid-cols-1 xl:grid-cols-5 gap-6">
-          <!-- Pie Chart -->
-          <div class="xl:col-span-3 bg-white rounded-3xl shadow-sm border p-6">
+        <!-- Charts -->
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+          <!-- Category Chart -->
+          <div class="lg:col-span-3 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6">
             <div class="font-semibold mb-4">Crime breakdown by category</div>
-            <canvas id="chart" class="max-h-[260px]"></canvas>
+            <canvas id="category-chart" class="max-h-[260px]"></canvas>
           </div>
 
-          <!-- Quick Stats -->
-          <div class="xl:col-span-2 bg-white rounded-3xl shadow-sm border p-6 space-y-4">
-            <div class="font-semibold">Quick stats</div>
-            <div id="stats-cards" class="space-y-3 text-sm"></div>
+          <!-- Top Streets -->
+          <div class="lg:col-span-2 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6">
+            <div class="font-semibold mb-4">Top streets by incidents</div>
+            <canvas id="streets-chart" class="max-h-[260px]"></canvas>
           </div>
         </div>
 
         <!-- Data Table -->
-        <div class="bg-white rounded-3xl shadow-sm border overflow-hidden">
-          <div class="px-6 py-4 border-b flex items-center justify-between">
-            <div class="font-semibold">Recent crimes (click row to locate on map)</div>
-            <div id="table-count" class="text-xs text-slate-500"></div>
+        <div class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+          <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+            <div class="font-semibold">Crime incidents</div>
+            <div class="flex items-center gap-3">
+              <input id="table-search" type="text" placeholder="Search street or category..." 
+                     class="px-4 py-1.5 text-sm bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-2xl w-64" oninput="filterTable()">
+              <button onclick="exportCSV()" class="text-sm px-4 py-1.5 border border-slate-300 dark:border-slate-700 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800">Export CSV</button>
+            </div>
           </div>
           <div class="overflow-auto max-h-[420px]">
             <table class="w-full text-sm">
-              <thead class="bg-slate-50 sticky top-0">
-                <tr class="text-left text-slate-500 text-xs font-medium">
+              <thead class="bg-slate-50 dark:bg-slate-800 sticky top-0">
+                <tr class="text-left text-xs font-medium text-slate-500">
                   <th class="px-6 py-3">Category</th>
                   <th class="px-6 py-3">Street</th>
                   <th class="px-6 py-3">Month</th>
-                  <th class="px-6 py-3 w-12"></th>
                 </tr>
               </thead>
-              <tbody id="crime-table" class="divide-y"></tbody>
+              <tbody id="crime-table" class="divide-y divide-slate-100 dark:divide-slate-800"></tbody>
             </table>
           </div>
         </div>
@@ -159,287 +171,272 @@
     </div>
   </div>
 
-  <!-- Simple Modal for Outcomes -->
-  <div id="modal" onclick="if (event.target.id === 'modal') hideModal()" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-[9999]">
-    <div onclick="event.stopImmediatePropagation()" class="bg-white rounded-3xl max-w-md w-full mx-4 shadow-xl">
-      <div class="px-6 py-4 border-b flex justify-between items-center">
-        <div class="font-semibold" id="modal-title">Outcomes</div>
-        <button onclick="hideModal()" class="text-2xl leading-none text-slate-400 hover:text-slate-600">×</button>
-      </div>
-      <div id="modal-body" class="p-6 text-sm max-h-[60vh] overflow-auto"></div>
-    </div>
-  </div>
-
   <script>
-    // Tailwind script
+    // Tailwind dark mode
     function initTailwind() {
-      document.documentElement.style.setProperty('--accent', '#0f172a');
+      if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      }
+    }
+    function toggleDarkMode() {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
     }
 
-    let map;
-    let markers = [];
-    let chartInstance = null;
+    let map, markerCluster, heatLayer;
     let currentCrimes = [];
+    let categoryChart, streetsChart;
 
     function initMap() {
       map = L.map('map').setView([51.5074, -0.1278], 13);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        maxZoom: 19
+        attribution: '&copy; OpenStreetMap'
       }).addTo(map);
-    }
-
-    function clearMarkers() {
-      markers.forEach(m => map.removeLayer(m));
-      markers = [];
-    }
-
-    function updateMap(crimes) {
-      clearMarkers();
-      if (!crimes || crimes.length === 0) return;
-
-      const bounds = L.latLngBounds();
-      crimes.forEach((crime, index) => {
-        if (!crime.location?.latitude || !crime.location?.longitude) return;
-
-        const lat = parseFloat(crime.location.latitude);
-        const lng = parseFloat(crime.location.longitude);
-        const marker = L.marker([lat, lng]).addTo(map);
-
-        const street = crime.location.street?.name || 'Unknown location';
-        const popupHtml = `
-          <div class="marker-popup">
-            <div class="font-semibold text-base mb-1">${crime.category}</div>
-            <div class="text-slate-600">${street}</div>
-            <div class="text-xs text-slate-500 mt-1">Month: ${crime.month}</div>
-            ${crime.persistent_id ? 
-              `<button onclick="showOutcomes('${crime.persistent_id}', this)" 
-                       class="mt-2 text-xs px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Load outcomes</button>` : ''}
-          </div>
-        `;
-        marker.bindPopup(popupHtml);
-        markers.push(marker);
-        bounds.extend([lat, lng]);
+      
+      markerCluster = L.markerClusterGroup({
+        chunkedLoading: true,
+        spiderfyOnMaxZoom: true
       });
+      map.addLayer(markerCluster);
+    }
 
-      if (bounds.isValid()) {
-        map.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
+    function clearMapLayers() {
+      if (markerCluster) markerCluster.clearLayers();
+      if (heatLayer) {
+        map.removeLayer(heatLayer);
+        heatLayer = null;
       }
     }
 
-    function updateChart(crimes) {
-      const counts = {};
-      crimes.forEach(c => {
-        const cat = c.category || 'unknown';
-        counts[cat] = (counts[cat] || 0) + 1;
+    function updateMap(crimes) {
+      clearMapLayers();
+      if (!crimes.length) return;
+
+      const bounds = L.latLngBounds();
+      const heatPoints = [];
+
+      crimes.forEach(crime => {
+        if (!crime.location?.latitude || !crime.location?.longitude) return;
+        
+        const lat = parseFloat(crime.location.latitude);
+        const lng = parseFloat(crime.location.longitude);
+        const street = crime.location.street?.name || 'Unknown';
+
+        const marker = L.marker([lat, lng]);
+        marker.bindPopup(`
+          <b>${crime.category}</b><br>
+          ${street}<br>
+          <span class="text-xs">${crime.month}</span>
+        `);
+
+        markerCluster.addLayer(marker);
+        heatPoints.push([lat, lng, 0.6]);
+        bounds.extend([lat, lng]);
       });
 
-      const labels = Object.keys(counts);
-      const data = Object.values(counts);
+      if (bounds.isValid()) map.fitBounds(bounds, { padding: [40, 40] });
 
-      if (chartInstance) chartInstance.destroy();
+      // Store heat points for toggle
+      window.heatPoints = heatPoints;
+    }
 
-      const ctx = document.getElementById('chart');
-      chartInstance = new Chart(ctx, {
+    function toggleHeatmap() {
+      if (!window.heatPoints) return;
+
+      if (heatLayer) {
+        map.removeLayer(heatLayer);
+        heatLayer = null;
+        return;
+      }
+
+      heatLayer = L.heatLayer(window.heatPoints, {
+        radius: 28,
+        blur: 18,
+        maxZoom: 17,
+        gradient: { 0.4: 'blue', 0.65: 'lime', 0.8: 'yellow', 1: 'red' }
+      }).addTo(map);
+    }
+
+    function updateKPIs(crimes, date) {
+      const container = document.getElementById('kpi-row');
+      if (!crimes.length) {
+        container.innerHTML = `<div class="col-span-4 text-center text-slate-400 py-4">No data for this selection</div>`;
+        return;
+      }
+
+      const total = crimes.length;
+      const categoryCounts = {};
+      crimes.forEach(c => categoryCounts[c.category] = (categoryCounts[c.category] || 0) + 1);
+      const topCategory = Object.keys(categoryCounts).sort((a,b) => categoryCounts[b]-categoryCounts[a])[0];
+      
+      const streetCounts = {};
+      crimes.forEach(c => {
+        const s = c.location?.street?.name || 'Unknown';
+        streetCounts[s] = (streetCounts[s] || 0) + 1;
+      });
+      const topStreet = Object.keys(streetCounts).sort((a,b) => streetCounts[b]-streetCounts[a])[0];
+
+      container.innerHTML = `
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5">
+          <div class="text-xs text-slate-500">TOTAL CRIMES</div>
+          <div class="text-4xl font-semibold mt-1">${total}</div>
+        </div>
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5">
+          <div class="text-xs text-slate-500">MOST COMMON</div>
+          <div class="text-2xl font-semibold mt-1 truncate">${topCategory}</div>
+        </div>
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5">
+          <div class="text-xs text-slate-500">TOP STREET</div>
+          <div class="text-xl font-semibold mt-1 truncate">${topStreet}</div>
+        </div>
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5">
+          <div class="text-xs text-slate-500">PERIOD</div>
+          <div class="text-2xl font-semibold mt-1">${date || 'Latest'}</div>
+        </div>
+      `;
+    }
+
+    function updateCharts(crimes) {
+      // Category chart
+      const catCounts = {};
+      crimes.forEach(c => catCounts[c.category] = (catCounts[c.category] || 0) + 1);
+      
+      if (categoryChart) categoryChart.destroy();
+      categoryChart = new Chart(document.getElementById('category-chart'), {
         type: 'doughnut',
         data: {
-          labels: labels,
-          datasets: [{
-            data: data,
-            backgroundColor: [
-              '#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4',
-              '#3b82f6', '#8b5cf6', '#ec4899', '#f43f5e', '#14b8a6'
-            ],
-            borderWidth: 2,
-            borderColor: '#fff'
-          }]
+          labels: Object.keys(catCounts),
+          datasets: [{ data: Object.values(catCounts), backgroundColor: ['#3b82f6','#ef4444','#f59e0b','#10b981','#8b5cf6','#ec4899'] }]
         },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          cutout: '65%',
-          plugins: {
-            legend: { position: 'right', labels: { boxWidth: 12, padding: 15, font: { size: 12 } } }
-          }
-        }
+        options: { responsive: true, cutout: '70%', plugins: { legend: { position: 'right' } } }
+      });
+
+      // Top streets chart
+      const streetCounts = {};
+      crimes.forEach(c => {
+        const s = c.location?.street?.name || 'Unknown';
+        streetCounts[s] = (streetCounts[s] || 0) + 1;
+      });
+      const sortedStreets = Object.entries(streetCounts).sort((a,b) => b[1]-a[1]).slice(0, 8);
+
+      if (streetsChart) streetsChart.destroy();
+      streetsChart = new Chart(document.getElementById('streets-chart'), {
+        type: 'bar',
+        data: {
+          labels: sortedStreets.map(x => x[0]),
+          datasets: [{ data: sortedStreets.map(x => x[1]), backgroundColor: '#3b82f6' }]
+        },
+        options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false } } }
       });
     }
 
     function updateTable(crimes) {
       const tbody = document.getElementById('crime-table');
       tbody.innerHTML = '';
+      window.currentTableCrimes = crimes;
 
-      const displayCrimes = crimes.slice(0, 80); // limit for performance
-
-      displayCrimes.forEach((crime, idx) => {
-        const street = crime.location?.street?.name || '—';
+      crimes.slice(0, 120).forEach(crime => {
         const row = document.createElement('tr');
-        row.className = `crime-row cursor-pointer`;
+        row.className = 'crime-row cursor-pointer';
         row.innerHTML = `
-          <td class="px-6 py-3.5 font-medium">${crime.category}</td>
-          <td class="px-6 py-3.5 text-slate-600">${street}</td>
-          <td class="px-6 py-3.5 text-slate-500">${crime.month}</td>
-          <td class="px-6 py-3.5 text-right">
-            <span class="text-blue-600 text-xs">→</span>
-          </td>
+          <td class="px-6 py-3 font-medium">${crime.category}</td>
+          <td class="px-6 py-3 text-slate-600 dark:text-slate-400">${crime.location?.street?.name || '—'}</td>
+          <td class="px-6 py-3 text-slate-500">${crime.month}</td>
         `;
-        row.onclick = () => centerOnCrime(crime);
+        row.onclick = () => {
+          if (crime.location?.latitude) {
+            map.flyTo([parseFloat(crime.location.latitude), parseFloat(crime.location.longitude)], 17);
+          }
+        };
         tbody.appendChild(row);
       });
-
-      document.getElementById('table-count').textContent = 
-        `${displayCrimes.length} of ${crimes.length} shown`;
     }
 
-    function centerOnCrime(crime) {
-      if (!crime.location?.latitude) return;
-      const lat = parseFloat(crime.location.latitude);
-      const lng = parseFloat(crime.location.longitude);
-      map.flyTo([lat, lng], 16, { duration: 0.8 });
-      
-      // open popup of nearest marker
-      markers.forEach(m => {
-        if (Math.abs(m.getLatLng().lat - lat) < 0.0001 && Math.abs(m.getLatLng().lng - lng) < 0.0001) {
-          m.openPopup();
-        }
+    function filterTable() {
+      const term = document.getElementById('table-search').value.toLowerCase();
+      const rows = document.querySelectorAll('#crime-table tr');
+      rows.forEach(row => {
+        row.style.display = row.textContent.toLowerCase().includes(term) ? '' : 'none';
       });
     }
 
-    async function showOutcomes(persistentId, btnElement) {
-      if (!persistentId) return;
-      const originalText = btnElement.textContent;
-      btnElement.textContent = 'Loading...';
-      btnElement.disabled = true;
+    function exportCSV() {
+      if (!window.currentTableCrimes) return;
+      const headers = ['category', 'street', 'month', 'latitude', 'longitude'];
+      let csv = headers.join(',') + '\n';
+      
+      window.currentTableCrimes.forEach(c => {
+        csv += [
+          c.category,
+          `"${c.location?.street?.name || ''}"`,
+          c.month,
+          c.location?.latitude || '',
+          c.location?.longitude || ''
+        ].join(',') + '\n';
+      });
 
-      try {
-        const res = await fetch(`https://data.police.uk/api/outcomes-for-crime/${persistentId}`);
-        const outcomes = await res.json();
-
-        let html = '<div class="space-y-3">';
-        if (!outcomes || outcomes.length === 0) {
-          html += '<p class="text-slate-500">No outcomes recorded for this crime.</p>';
-        } else {
-          outcomes.forEach(o => {
-            html += `<div class="border-l-2 border-blue-500 pl-3">
-              <div class="font-medium">${o.outcome || 'Outcome recorded'}</div>
-              <div class="text-xs text-slate-500">${o.date || ''}</div>
-            </div>`;
-          });
-        }
-        html += '</div>';
-
-        document.getElementById('modal-title').textContent = 'Crime Outcomes';
-        document.getElementById('modal-body').innerHTML = html;
-        document.getElementById('modal').classList.remove('hidden');
-        document.getElementById('modal').classList.add('flex');
-      } catch (e) {
-        alert('Could not load outcomes. The API may be temporarily unavailable.');
-      } finally {
-        btnElement.textContent = originalText;
-        btnElement.disabled = false;
-      }
-    }
-
-    function hideModal() {
-      const modal = document.getElementById('modal');
-      modal.classList.remove('flex');
-      modal.classList.add('hidden');
-    }
-
-    function updateStats(crimes) {
-      const total = crimes.length;
-      document.getElementById('total-crimes').innerHTML = `<span class="font-semibold">${total}</span> crimes`;
-
-      const cards = document.getElementById('stats-cards');
-      cards.innerHTML = `
-        <div class="flex justify-between items-center py-1">
-          <span class="text-slate-600">Total incidents</span>
-          <span class="font-semibold text-xl">${total}</span>
-        </div>
-        <div class="flex justify-between items-center py-1">
-          <span class="text-slate-600">Unique categories</span>
-          <span class="font-semibold">${new Set(crimes.map(c => c.category)).size}</span>
-        </div>
-        <div class="text-[10px] text-slate-400 pt-2">Locations are anonymised to \~10-100m accuracy (per police.uk policy)</div>
-      `;
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `uk-police-crimes-${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
     }
 
     async function loadData() {
-      const status = document.getElementById('status');
-      const lat = parseFloat(document.getElementById('lat').value);
-      const lng = parseFloat(document.getElementById('lng').value);
+      const lat = document.getElementById('lat').value;
+      const lng = document.getElementById('lng').value;
       const category = document.getElementById('category').value;
       const date = document.getElementById('date').value;
 
-      if (!lat || !lng) {
-        status.textContent = 'Please enter valid coordinates';
-        return;
-      }
-
-      status.textContent = 'Fetching data from police.uk...';
-      status.style.color = '#64748b';
+      const status = document.getElementById('total-crimes');
+      status.textContent = 'Loading...';
 
       let url = `https://data.police.uk/api/crimes-street/\( {category}?lat= \){lat}&lng=${lng}`;
       if (date) url += `&date=${date}`;
 
       try {
         const res = await fetch(url);
-        if (!res.ok) throw new Error('API error');
         const crimes = await res.json();
-
         currentCrimes = crimes;
 
-        document.getElementById('map-subtitle').textContent = 
-          date ? `• ${date}` : '• Latest available data';
-
+        document.getElementById('map-subtitle').textContent = date ? `• ${date}` : '• Latest data';
         updateMap(crimes);
-        updateChart(crimes);
+        updateKPIs(crimes, date);
+        updateCharts(crimes);
         updateTable(crimes);
-        updateStats(crimes);
-
-        status.textContent = `Loaded ${crimes.length} records`;
-        setTimeout(() => status.textContent = '', 2500);
-      } catch (err) {
-        status.textContent = 'Error loading data. Check coordinates or try again.';
-        status.style.color = '#ef4444';
-        console.error(err);
-      }
-    }
-
-    async function searchPostcode() {
-      const input = document.getElementById('postcode').value.trim().toUpperCase().replace(/\s/g, '');
-      if (!input) return;
-
-      const status = document.getElementById('status');
-      status.textContent = 'Looking up postcode...';
-
-      try {
-        const res = await fetch(`https://api.postcodes.io/postcodes/${input}`);
-        const json = await res.json();
-
-        if (json.status === 200 && json.result) {
-          document.getElementById('lat').value = json.result.latitude;
-          document.getElementById('lng').value = json.result.longitude;
-          status.textContent = 'Postcode found — loading police data...';
-          await loadData();
-        } else {
-          status.textContent = 'Postcode not found';
-        }
+        status.textContent = `${crimes.length} crimes`;
       } catch (e) {
-        status.textContent = 'Postcode lookup failed';
+        status.textContent = 'Error loading data';
       }
     }
 
-    function useMyLocation() {
-      if (!navigator.geolocation) {
-        alert('Geolocation not supported by your browser');
+    async function loadComparison() {
+      const lat = document.getElementById('lat').value;
+      const lng = document.getElementById('lng').value;
+      const category = document.getElementById('category').value;
+      const date = document.getElementById('date').value;
+
+      if (!date) {
+        alert('Please select a specific month first to compare with the previous one.');
         return;
       }
-      navigator.geolocation.getCurrentPosition(pos => {
-        document.getElementById('lat').value = pos.coords.latitude.toFixed(5);
-        document.getElementById('lng').value = pos.coords.longitude.toFixed(5);
-        loadData();
-      }, () => alert('Could not get your location'));
+
+      const [year, month] = date.split('-').map(Number);
+      const prevDate = `\( {year}- \){String(month - 1).padStart(2, '0')}`;
+
+      const url1 = `https://data.police.uk/api/crimes-street/\( {category}?lat= \){lat}&lng=\( {lng}&date= \){date}`;
+      const url2 = `https://data.police.uk/api/crimes-street/\( {category}?lat= \){lat}&lng=\( {lng}&date= \){prevDate}`;
+
+      const [current, previous] = await Promise.all([
+        fetch(url1).then(r => r.json()),
+        fetch(url2).then(r => r.json())
+      ]);
+
+      const diff = current.length - previous.length;
+      const pct = previous.length > 0 ? ((diff / previous.length) * 100).toFixed(1) : 0;
+
+      alert(`Comparison:\n${date}: \( {current.length} crimes\n \){prevDate}: ${previous.length} crimes\n\nChange: \( {diff > 0 ? '+' : ''} \){diff} (${pct}%)`);
     }
 
     function quickLocation(lat, lng) {
@@ -448,35 +445,42 @@
       loadData();
     }
 
-    async function loadLastUpdated() {
+    async function searchPostcode() {
+      const pc = document.getElementById('postcode').value.trim().toUpperCase().replace(/\s/g, '');
+      if (!pc) return;
+
+      const res = await fetch(`https://api.postcodes.io/postcodes/${pc}`);
+      const json = await res.json();
+      if (json.status === 200) {
+        document.getElementById('lat').value = json.result.latitude;
+        document.getElementById('lng').value = json.result.longitude;
+        loadData();
+      }
+    }
+
+    function useMyLocation() {
+      navigator.geolocation.getCurrentPosition(pos => {
+        document.getElementById('lat').value = pos.coords.latitude.toFixed(5);
+        document.getElementById('lng').value = pos.coords.longitude.toFixed(5);
+        loadData();
+      });
+    }
+
+    async function init() {
+      initTailwind();
+      initMap();
+      
+      // Load last updated
       try {
         const res = await fetch('https://data.police.uk/api/crime-last-updated');
         const data = await res.json();
-        if (data?.date) {
-          document.getElementById('last-updated').innerHTML = 
-            `Data as of <span class="font-medium">${data.date}</span>`;
-        }
+        if (data.date) document.getElementById('last-updated').innerHTML = `Data as of <span class="font-medium">${data.date}</span>`;
       } catch (_) {}
-    }
 
-    // Boot everything
-    function init() {
-      initTailwind();
-      initMap();
-      loadLastUpdated();
-
-      // Load default data on first visit
+      // Load initial data
       setTimeout(() => {
         loadData();
-      }, 600);
-
-      // Allow Enter key in postcode field
-      document.getElementById('postcode').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') searchPostcode();
-      });
-
-      // Keyboard hint
-      console.log('%c[UK Police Dashboard] Ready. Edit this file and push to GitHub to update your live site.', 'color:#64748b');
+      }, 800);
     }
 
     window.onload = init;
