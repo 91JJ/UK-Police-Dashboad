@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UK Police Data Dashboard • GitHub Pages Demo</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    #map { height: 520px; border-radius: 12px; }
+    .crime-row:hover { background-color: #f8fafc; }
+    .marker-popup { font-size: 13px; line-height: 1.4; }
+  </style>
+</head>
+<body class="bg-slate-50">
+  <div class="max-w-[1400px] mx-auto">
+    <!-- Header -->
+    <div class="flex items-center justify-between px-8 py-6 border-b bg-white">
+      <div>
+        <h1 class="text-3xl font-semibold tracking-tight">UK Police Data Dashboard</h1>
+        <p class="text-slate-500 text-sm mt-1">Live data from <a href="https://data.police.uk" target="_blank" class="text-blue-600 hover:underline">data.police.uk</a> • Hosted on GitHub Pages</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <div id="last-updated" class="text-xs px-3 py-1.5 bg-slate-100 rounded-full text-slate-600"></div>
+        <button onclick="loadData()" 
+                class="px-5 py-2.5 bg-slate-900 hover:bg-black text-white text-sm font-medium rounded-xl flex items-center gap-2 transition-colors">
+          <span>Refresh Data</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="flex flex-col lg:flex-row gap-6 p-8">
+      <!-- Sidebar Controls -->
+      <div class="lg:w-80 flex-shrink-0 bg-white rounded-3xl shadow-sm border p-6 space-y-6">
+        <div>
+          <label class="block text-xs font-semibold tracking-widest text-slate-500 mb-2">QUICK LOCATIONS</label>
+          <div class="grid grid-cols-2 gap-2">
+            <button onclick="quickLocation(51.5074, -0.1278)" class="text-sm px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl transition">London</button>
+            <button onclick="quickLocation(53.4808, -2.2426)" class="text-sm px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl transition">Manchester</button>
+            <button onclick="quickLocation(52.4862, -1.8904)" class="text-sm px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl transition">Birmingham</button>
+            <button onclick="quickLocation(55.9533, -3.1883)" class="text-sm px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl transition">Edinburgh</button>
+          </div>
+        </div>
+
+        <!-- Postcode Search -->
+        <div>
+          <label class="block text-xs font-semibold tracking-widest text-slate-500 mb-2">POSTCODE SEARCH</label>
+          <div class="flex gap-2">
+            <input id="postcode" type="text" placeholder="e.g. SW1A 1AA" 
+                   class="flex-1 px-4 py-2.5 border rounded-2xl text-sm focus:outline-none focus:border-slate-400">
+            <button onclick="searchPostcode()" 
+                    class="px-5 bg-white border hover:bg-slate-50 rounded-2xl text-sm font-medium transition">Go</button>
+          </div>
+        </div>
+
+        <!-- Manual Coordinates -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold tracking-widest text-slate-500 mb-1.5">LATITUDE</label>
+            <input id="lat" type="text" value="51.5074" class="w-full px-4 py-2.5 border rounded-2xl text-sm">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold tracking-widest text-slate-500 mb-1.5">LONGITUDE</label>
+            <input id="lng" type="text" value="-0.1278" class="w-full px-4 py-2.5 border rounded-2xl text-sm">
+          </div>
+        </div>
+
+        <button onclick="useMyLocation()" 
+                class="w-full py-2.5 text-sm border border-slate-300 hover:bg-slate-50 rounded-2xl flex items-center justify-center gap-2">
+          📍 Use my current location
+        </button>
+
+        <!-- Filters -->
+        <div class="space-y-4 pt-2">
+          <div>
+            <label class="block text-xs font-semibold tracking-widest text-slate-500 mb-1.5">CRIME CATEGORY</label>
+            <select id="category" class="w-full px-4 py-2.5 border rounded-2xl text-sm bg-white">
+              <option value="all-crime">All Crime</option>
+              <option value="anti-social-behaviour">Anti-social behaviour</option>
+              <option value="burglary">Burglary</option>
+              <option value="criminal-damage-arson">Criminal damage & arson</option>
+              <option value="drugs">Drugs</option>
+              <option value="other-theft">Other theft</option>
+              <option value="possession-of-weapons">Possession of weapons</option>
+              <option value="public-order">Public order</option>
+              <option value="robbery">Robbery</option>
+              <option value="shoplifting">Shoplifting</option>
+              <option value="theft-from-the-person">Theft from the person</option>
+              <option value="vehicle-crime">Vehicle crime</option>
+              <option value="violent-crime">Violent crime</option>
+              <option value="other-crime">Other crime</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold tracking-widest text-slate-500 mb-1.5">MONTH (optional — leave blank for latest)</label>
+            <input id="date" type="month" value="2025-01" class="w-full px-4 py-2.5 border rounded-2xl text-sm">
+          </div>
+        </div>
+
+        <button onclick="loadData()" 
+                class="w-full py-3.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold rounded-2xl text-sm tracking-wider transition">
+          LOAD POLICE DATA
+        </button>
+
+        <div id="status" class="text-center text-xs text-slate-500 min-h-[20px]"></div>
+      </div>
+
+      <!-- Main Content -->
+      <div class="flex-1 min-w-0 space-y-6">
+        <!-- Map -->
+        <div class="bg-white rounded-3xl shadow-sm border p-4">
+          <div class="flex items-center justify-between mb-3 px-2">
+            <div class="font-semibold">Crime Map <span id="map-subtitle" class="text-slate-400 text-sm font-normal"></span></div>
+            <div id="total-crimes" class="text-sm px-4 py-1 bg-slate-100 rounded-full font-medium"></div>
+          </div>
+          <div id="map"></div>
+        </div>
+
+        <!-- Stats + Chart -->
+        <div class="grid grid-cols-1 xl:grid-cols-5 gap-6">
+          <!-- Pie Chart -->
+          <div class="xl:col-span-3 bg-white rounded-3xl shadow-sm border p-6">
+            <div class="font-semibold mb-4">Crime breakdown by category</div>
+            <canvas id="chart" class="max-h-[260px]"></canvas>
+          </div>
+
+          <!-- Quick Stats -->
+          <div class="xl:col-span-2 bg-white rounded-3xl shadow-sm border p-6 space-y-4">
+            <div class="font-semibold">Quick stats</div>
+            <div id="stats-cards" class="space-y-3 text-sm"></div>
+          </div>
+        </div>
+
+        <!-- Data Table -->
+        <div class="bg-white rounded-3xl shadow-sm border overflow-hidden">
+          <div class="px-6 py-4 border-b flex items-center justify-between">
+            <div class="font-semibold">Recent crimes (click row to locate on map)</div>
+            <div id="table-count" class="text-xs text-slate-500"></div>
+          </div>
+          <div class="overflow-auto max-h-[420px]">
+            <table class="w-full text-sm">
+              <thead class="bg-slate-50 sticky top-0">
+                <tr class="text-left text-slate-500 text-xs font-medium">
+                  <th class="px-6 py-3">Category</th>
+                  <th class="px-6 py-3">Street</th>
+                  <th class="px-6 py-3">Month</th>
+                  <th class="px-6 py-3 w-12"></th>
+                </tr>
+              </thead>
+              <tbody id="crime-table" class="divide-y"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Simple Modal for Outcomes -->
+  <div id="modal" onclick="if (event.target.id === 'modal') hideModal()" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-[9999]">
+    <div onclick="event.stopImmediatePropagation()" class="bg-white rounded-3xl max-w-md w-full mx-4 shadow-xl">
+      <div class="px-6 py-4 border-b flex justify-between items-center">
+        <div class="font-semibold" id="modal-title">Outcomes</div>
+        <button onclick="hideModal()" class="text-2xl leading-none text-slate-400 hover:text-slate-600">×</button>
+      </div>
+      <div id="modal-body" class="p-6 text-sm max-h-[60vh] overflow-auto"></div>
+    </div>
+  </div>
+
+  <script>
+    // Tailwind script
+    function initTailwind() {
+      document.documentElement.style.setProperty('--accent', '#0f172a');
+    }
+
+    let map;
+    let markers = [];
+    let chartInstance = null;
+    let currentCrimes = [];
+
+    function initMap() {
+      map = L.map('map').setView([51.5074, -0.1278], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 19
+      }).addTo(map);
+    }
+
+    function clearMarkers() {
+      markers.forEach(m => map.removeLayer(m));
+      markers = [];
+    }
+
+    function updateMap(crimes) {
+      clearMarkers();
+      if (!crimes || crimes.length === 0) return;
+
+      const bounds = L.latLngBounds();
+      crimes.forEach((crime, index) => {
+        if (!crime.location?.latitude || !crime.location?.longitude) return;
+
+        const lat = parseFloat(crime.location.latitude);
+        const lng = parseFloat(crime.location.longitude);
+        const marker = L.marker([lat, lng]).addTo(map);
+
+        const street = crime.location.street?.name || 'Unknown location';
+        const popupHtml = `
+          <div class="marker-popup">
+            <div class="font-semibold text-base mb-1">${crime.category}</div>
+            <div class="text-slate-600">${street}</div>
+            <div class="text-xs text-slate-500 mt-1">Month: ${crime.month}</div>
+            ${crime.persistent_id ? 
+              `<button onclick="showOutcomes('${crime.persistent_id}', this)" 
+                       class="mt-2 text-xs px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Load outcomes</button>` : ''}
+          </div>
+        `;
+        marker.bindPopup(popupHtml);
+        markers.push(marker);
+        bounds.extend([lat, lng]);
+      });
+
+      if (bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
+      }
+    }
+
+    function updateChart(crimes) {
+      const counts = {};
+      crimes.forEach(c => {
+        const cat = c.category || 'unknown';
+        counts[cat] = (counts[cat] || 0) + 1;
+      });
+
+      const labels = Object.keys(counts);
+      const data = Object.values(counts);
+
+      if (chartInstance) chartInstance.destroy();
+
+      const ctx = document.getElementById('chart');
+      chartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: data,
+            backgroundColor: [
+              '#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4',
+              '#3b82f6', '#8b5cf6', '#ec4899', '#f43f5e', '#14b8a6'
+            ],
+            borderWidth: 2,
+            borderColor: '#fff'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '65%',
+          plugins: {
+            legend: { position: 'right', labels: { boxWidth: 12, padding: 15, font: { size: 12 } } }
+          }
+        }
+      });
+    }
+
+    function updateTable(crimes) {
+      const tbody = document.getElementById('crime-table');
+      tbody.innerHTML = '';
+
+      const displayCrimes = crimes.slice(0, 80); // limit for performance
+
+      displayCrimes.forEach((crime, idx) => {
+        const street = crime.location?.street?.name || '—';
+        const row = document.createElement('tr');
+        row.className = `crime-row cursor-pointer`;
+        row.innerHTML = `
+          <td class="px-6 py-3.5 font-medium">${crime.category}</td>
+          <td class="px-6 py-3.5 text-slate-600">${street}</td>
+          <td class="px-6 py-3.5 text-slate-500">${crime.month}</td>
+          <td class="px-6 py-3.5 text-right">
+            <span class="text-blue-600 text-xs">→</span>
+          </td>
+        `;
+        row.onclick = () => centerOnCrime(crime);
+        tbody.appendChild(row);
+      });
+
+      document.getElementById('table-count').textContent = 
+        `${displayCrimes.length} of ${crimes.length} shown`;
+    }
+
+    function centerOnCrime(crime) {
+      if (!crime.location?.latitude) return;
+      const lat = parseFloat(crime.location.latitude);
+      const lng = parseFloat(crime.location.longitude);
+      map.flyTo([lat, lng], 16, { duration: 0.8 });
+      
+      // open popup of nearest marker
+      markers.forEach(m => {
+        if (Math.abs(m.getLatLng().lat - lat) < 0.0001 && Math.abs(m.getLatLng().lng - lng) < 0.0001) {
+          m.openPopup();
+        }
+      });
+    }
+
+    async function showOutcomes(persistentId, btnElement) {
+      if (!persistentId) return;
+      const originalText = btnElement.textContent;
+      btnElement.textContent = 'Loading...';
+      btnElement.disabled = true;
+
+      try {
+        const res = await fetch(`https://data.police.uk/api/outcomes-for-crime/${persistentId}`);
+        const outcomes = await res.json();
+
+        let html = '<div class="space-y-3">';
+        if (!outcomes || outcomes.length === 0) {
+          html += '<p class="text-slate-500">No outcomes recorded for this crime.</p>';
+        } else {
+          outcomes.forEach(o => {
+            html += `<div class="border-l-2 border-blue-500 pl-3">
+              <div class="font-medium">${o.outcome || 'Outcome recorded'}</div>
+              <div class="text-xs text-slate-500">${o.date || ''}</div>
+            </div>`;
+          });
+        }
+        html += '</div>';
+
+        document.getElementById('modal-title').textContent = 'Crime Outcomes';
+        document.getElementById('modal-body').innerHTML = html;
+        document.getElementById('modal').classList.remove('hidden');
+        document.getElementById('modal').classList.add('flex');
+      } catch (e) {
+        alert('Could not load outcomes. The API may be temporarily unavailable.');
+      } finally {
+        btnElement.textContent = originalText;
+        btnElement.disabled = false;
+      }
+    }
+
+    function hideModal() {
+      const modal = document.getElementById('modal');
+      modal.classList.remove('flex');
+      modal.classList.add('hidden');
+    }
+
+    function updateStats(crimes) {
+      const total = crimes.length;
+      document.getElementById('total-crimes').innerHTML = `<span class="font-semibold">${total}</span> crimes`;
+
+      const cards = document.getElementById('stats-cards');
+      cards.innerHTML = `
+        <div class="flex justify-between items-center py-1">
+          <span class="text-slate-600">Total incidents</span>
+          <span class="font-semibold text-xl">${total}</span>
+        </div>
+        <div class="flex justify-between items-center py-1">
+          <span class="text-slate-600">Unique categories</span>
+          <span class="font-semibold">${new Set(crimes.map(c => c.category)).size}</span>
+        </div>
+        <div class="text-[10px] text-slate-400 pt-2">Locations are anonymised to \~10-100m accuracy (per police.uk policy)</div>
+      `;
+    }
+
+    async function loadData() {
+      const status = document.getElementById('status');
+      const lat = parseFloat(document.getElementById('lat').value);
+      const lng = parseFloat(document.getElementById('lng').value);
+      const category = document.getElementById('category').value;
+      const date = document.getElementById('date').value;
+
+      if (!lat || !lng) {
+        status.textContent = 'Please enter valid coordinates';
+        return;
+      }
+
+      status.textContent = 'Fetching data from police.uk...';
+      status.style.color = '#64748b';
+
+      let url = `https://data.police.uk/api/crimes-street/\( {category}?lat= \){lat}&lng=${lng}`;
+      if (date) url += `&date=${date}`;
+
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('API error');
+        const crimes = await res.json();
+
+        currentCrimes = crimes;
+
+        document.getElementById('map-subtitle').textContent = 
+          date ? `• ${date}` : '• Latest available data';
+
+        updateMap(crimes);
+        updateChart(crimes);
+        updateTable(crimes);
+        updateStats(crimes);
+
+        status.textContent = `Loaded ${crimes.length} records`;
+        setTimeout(() => status.textContent = '', 2500);
+      } catch (err) {
+        status.textContent = 'Error loading data. Check coordinates or try again.';
+        status.style.color = '#ef4444';
+        console.error(err);
+      }
+    }
+
+    async function searchPostcode() {
+      const input = document.getElementById('postcode').value.trim().toUpperCase().replace(/\s/g, '');
+      if (!input) return;
+
+      const status = document.getElementById('status');
+      status.textContent = 'Looking up postcode...';
+
+      try {
+        const res = await fetch(`https://api.postcodes.io/postcodes/${input}`);
+        const json = await res.json();
+
+        if (json.status === 200 && json.result) {
+          document.getElementById('lat').value = json.result.latitude;
+          document.getElementById('lng').value = json.result.longitude;
+          status.textContent = 'Postcode found — loading police data...';
+          await loadData();
+        } else {
+          status.textContent = 'Postcode not found';
+        }
+      } catch (e) {
+        status.textContent = 'Postcode lookup failed';
+      }
+    }
+
+    function useMyLocation() {
+      if (!navigator.geolocation) {
+        alert('Geolocation not supported by your browser');
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(pos => {
+        document.getElementById('lat').value = pos.coords.latitude.toFixed(5);
+        document.getElementById('lng').value = pos.coords.longitude.toFixed(5);
+        loadData();
+      }, () => alert('Could not get your location'));
+    }
+
+    function quickLocation(lat, lng) {
+      document.getElementById('lat').value = lat;
+      document.getElementById('lng').value = lng;
+      loadData();
+    }
+
+    async function loadLastUpdated() {
+      try {
+        const res = await fetch('https://data.police.uk/api/crime-last-updated');
+        const data = await res.json();
+        if (data?.date) {
+          document.getElementById('last-updated').innerHTML = 
+            `Data as of <span class="font-medium">${data.date}</span>`;
+        }
+      } catch (_) {}
+    }
+
+    // Boot everything
+    function init() {
+      initTailwind();
+      initMap();
+      loadLastUpdated();
+
+      // Load default data on first visit
+      setTimeout(() => {
+        loadData();
+      }, 600);
+
+      // Allow Enter key in postcode field
+      document.getElementById('postcode').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') searchPostcode();
+      });
+
+      // Keyboard hint
+      console.log('%c[UK Police Dashboard] Ready. Edit this file and push to GitHub to update your live site.', 'color:#64748b');
+    }
+
+    window.onload = init;
+  </script>
+</body>
+</html>
