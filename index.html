@@ -536,7 +536,7 @@
                 <div class="tab-pane fade" id="team-tab" role="tabpanel">
                     <div class="alert alert-light small mb-3">
                         <i class="bi bi-info-circle me-1"></i> 
-                        Data from official neighbourhood policing teams where available. Contact details via force website.
+                        Data from the official <code>/team</code> endpoint where published. Many areas only show team info on the force website.
                     </div>
                     <div id="team-grid" class="row g-3">
                         <!-- Officer cards populated dynamically -->
@@ -645,6 +645,39 @@
         let compareChart = null;
         let crimeMarkers = [];         // For filtering on crime map
         let currentForceData = null;   // Cache force details (socials etc)
+
+        // Lightweight in-memory + localStorage cache to reduce 429 rate limits on data.police.uk
+        const apiCache = new Map();
+        const CACHE_TTL = 1000 * 60 * 10; // 10 minutes
+
+        async function cachedFetch(url, options = {}) {
+            const key = url;
+            const cached = apiCache.get(key);
+            if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
+                return cached.data;
+            }
+            try {
+                const res = await fetch(url, options);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                apiCache.set(key, { data, timestamp: Date.now() });
+                // Also persist last-updated in localStorage for faster reloads
+                if (url.includes('crime-last-updated')) {
+                    localStorage.setItem('police_last_updated', JSON.stringify({ data, timestamp: Date.now() }));
+                }
+                return data;
+            } catch (err) {
+                // Fallback to localStorage for last-updated
+                if (url.includes('crime-last-updated')) {
+                    const stored = localStorage.getItem('police_last_updated');
+                    if (stored) {
+                        const parsed = JSON.parse(stored);
+                        if (Date.now() - parsed.timestamp < CACHE_TTL * 6) return parsed.data;
+                    }
+                }
+                throw err;
+            }
+        }
 
         // Predefined force centers for reliable map centering and dropdown fallback
         const FORCE_CENTERS = {
@@ -777,14 +810,19 @@
         function initForcesMap() {
             if (forcesMap) forcesMap.remove();
             
-            forcesMap = L.map('forces-map').setView([54.5, -2.0], 5.5); // UK center
+            // Improved initial view + mobile friendly zoom (tread lightly)
+            forcesMap = L.map('forces-map', {
+                zoomControl: true,
+                scrollWheelZoom: true,
+                touchZoom: true
+            }).setView([54.6, -2.2], 5.8);
             
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap contributors',
                 maxZoom: 18
             }).addTo(forcesMap);
             
-            // Add markers for major forces from FORCE_CENTERS
+            // Add markers for major forces
             Object.keys(FORCE_CENTERS).forEach(forceId => {
                 const center = FORCE_CENTERS[forceId];
                 const marker = L.marker([center.lat, center.lng]).addTo(forcesMap);
@@ -800,7 +838,16 @@
                 marker.bindPopup(popupContent);
             });
             
-            // Optional: Add a note layer or control
+            // Add a subtle "Reset view" control (light UX improvement)
+            const resetControl = L.control({ position: 'topright' });
+            resetControl.onAdd = function() {
+                const btn = L.DomUtil.create('button', 'btn btn-sm btn-light shadow-sm');
+                btn.innerHTML = '<i class="bi bi-arrow-counterclockwise"></i> Reset';
+                btn.style.fontSize = '12px';
+                btn.onclick = () => forcesMap.setView([54.6, -2.2], 5.8);
+                return btn;
+            };
+            resetControl.addTo(forcesMap);
         }
 
         async function selectForceFromMap(forceId) {
@@ -1234,7 +1281,7 @@
 
         async function loadLocalTeam(forceId, neighId) {
             const grid = document.getElementById('team-grid');
-            grid.innerHTML = `<div class="col-12 text-center py-3"><div class="loading-spinner mx-auto"></div></div>`;
+            grid.innerHTML = `<div class="col-12 text-center py-3"><div class="loading-spinner mx-auto"></div><div class="small text-muted mt-2">Loading local policing team...</div></div>`;
             
             try {
                 const res = await fetch(`https://data.police.uk/api/${forceId}/${neighId}/team`);
@@ -1267,7 +1314,15 @@
                 });
                 
             } catch (err) {
-                grid.innerHTML = '<div class="col-12"><div class="alert alert-light">Local policing team information is not available via the open API for every area. Check the force website for the latest team details.</div></div>';
+                grid.innerHTML = `
+                    <div class="col-12">
+                        <div class="alert alert-light border">
+                            <i class="bi bi-people me-2"></i>
+                            <strong>Local team data not available for this neighbourhood.</strong><br>
+                            <span class="small">Many neighbourhoods publish team information on the official police.uk site or force website. 
+                            The open API only returns detailed officers for some areas.</span>
+                        </div>
+                    </div>`;
             }
         }
 
@@ -1300,29 +1355,30 @@
         }
 
         function populateOverviewTab(neighData, forceData) {
-            // Description
+            // Description - use innerHTML for better formatting if descriptions contain basic markup
             const descEl = document.getElementById('area-description');
+            let description = 'This is your local policing area. Data is sourced from the official UK Police open data portal.';
             if (neighData && neighData.description) {
-                descEl.textContent = neighData.description;
+                description = neighData.description;
             } else if (forceData && forceData.description) {
-                descEl.textContent = forceData.description;
-            } else {
-                descEl.textContent = 'This is your local policing area. Data is sourced from the official UK Police open data portal.';
+                description = forceData.description;
             }
+            descEl.innerHTML = `<p class="mb-0">${description}</p>`;
             
-            // Quick facts
+            // Quick facts - cleaner Bootstrap list
             const factsEl = document.getElementById('quick-facts');
             let html = '<ul class="list-unstyled mb-0 small">';
-            if (neighData && neighData.population) html += `<li><strong>Population:</strong> ~${neighData.population.toLocaleString()}</li>`;
-            html += `<li><strong>Last data update:</strong> ${new Date().toLocaleDateString('en-GB', {month:'long', year:'numeric'})}</li>`;
-            html += `<li><strong>Source:</strong> data.police.uk (Home Office)</li>`;
+            if (neighData && neighData.population) {
+                html += `<li class="mb-1"><i class="bi bi-people me-2"></i><strong>Population:</strong> ~${neighData.population.toLocaleString()}</li>`;
+            }
+            html += `<li class="mb-1"><i class="bi bi-calendar3 me-2"></i><strong>Last data update:</strong> ${new Date().toLocaleDateString('en-GB', {month:'long', year:'numeric'})}</li>`;
+            html += `<li><i class="bi bi-database me-2"></i><strong>Source:</strong> data.police.uk (Home Office)</li>`;
             html += '</ul>';
             factsEl.innerHTML = html;
             
-            // Priorities (if endpoint works)
+            // Priorities placeholder
             const prioEl = document.getElementById('priorities-list');
-            prioEl.innerHTML = '<div class="small text-muted">Priorities data available on force website for many areas.</div>';
-            // Could fetch /${forceId}/${neighId}/priorities here if desired
+            prioEl.innerHTML = '<div class="small text-muted"><i class="bi bi-info-circle me-1"></i>Priorities and upcoming events are published on the official force website for many neighbourhoods.</div>';
         }
 
         // =============================================
@@ -1337,22 +1393,31 @@
                 crimeMap = null;
             }
             
-            crimeMap = L.map('crime-map').setView([currentLat, currentLng], 13);
+            // Improved mobile + zoom behaviour (tread lightly)
+            crimeMap = L.map('crime-map', {
+                zoomControl: true,
+                tap: true,
+                touchZoom: true,
+                scrollWheelZoom: true
+            }).setView([currentLat, currentLng], 14);
             
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap'
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 18
             }).addTo(crimeMap);
             
-            // Add crime markers
+            // Add crime markers with rich click details
             addCrimeMarkersToMap();
             
-            // Fit to crimes if many
-            if (currentCrimes.length > 5) {
-                try {
-                    const group = L.featureGroup(crimeMarkers);
-                    crimeMap.fitBounds(group.getBounds().pad(0.2));
-                } catch (_) {}
-            }
+            // Auto zoom to fit crimes when available (much better UX)
+            setTimeout(() => {
+                if (currentCrimes.length > 3 && crimeMarkers.length > 0) {
+                    try {
+                        const group = L.featureGroup(crimeMarkers);
+                        crimeMap.fitBounds(group.getBounds().pad(0.15), { maxZoom: 16 });
+                    } catch (_) {}
+                }
+            }, 400);
         }
 
         function addCrimeMarkersToMap(filteredCrimes = null) {
@@ -1372,15 +1437,87 @@
                 if (isNaN(lat) || isNaN(lng)) return;
                 
                 const marker = L.marker([lat, lng]);
+                
+                // Rich popup + click to open detailed modal (matches police.uk behaviour)
                 const popupHtml = `
-                    <strong>${crime.category.replace(/-/g, ' ')}</strong><br>
-                    <small>${crime.location.street ? crime.location.street.name : 'Unknown street'}</small><br>
-                    <span class="badge bg-secondary mt-1">${crime.outcome_status ? crime.outcome_status.category : 'Under investigation'}</span>
+                    <div style="min-width:180px">
+                        <strong>${(crime.category || '').replace(/-/g, ' ')}</strong><br>
+                        <small class="text-muted">${crime.location.street ? crime.location.street.name : 'Unknown location'}</small><br>
+                        <span class="badge bg-secondary mt-1 mb-2">${crime.outcome_status ? crime.outcome_status.category : 'Under investigation'}</span><br>
+                        <button class="btn btn-sm btn-outline-primary w-100 mt-1" onclick="showCrimeDetailModal(${JSON.stringify(crime).replace(/"/g, '&quot;')})">
+                            View full details &amp; outcome
+                        </button>
+                    </div>
                 `;
+                
                 marker.bindPopup(popupHtml);
+                
+                // Also allow direct click on marker to open modal (better mobile experience)
+                marker.on('click', () => {
+                    // Close popup first for cleaner UX
+                    marker.closePopup();
+                    showCrimeDetailModal(crime);
+                });
+                
                 marker.addTo(crimeMap);
                 crimeMarkers.push(marker);
             });
+        }
+
+        // New lightweight modal for crime outcome/details (tread lightly addition)
+        function showCrimeDetailModal(crime) {
+            const modalId = 'crime-detail-modal';
+            // Remove any existing
+            const existing = document.getElementById(modalId);
+            if (existing) existing.remove();
+            
+            const outcome = crime.outcome_status ? crime.outcome_status.category : 'Under investigation';
+            const locationName = crime.location && crime.location.street ? crime.location.street.name : 'Unknown street';
+            const month = crime.month || '—';
+            
+            const html = `
+                <div class="modal fade" id="${modalId}" tabindex="-1" aria-hidden="true">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content">
+                            <div class="modal-header bg-light">
+                                <h5 class="modal-title">
+                                    <i class="bi bi-exclamation-triangle me-2"></i>
+                                    ${(crime.category || '').replace(/-/g, ' ')}
+                                </h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="mb-3">
+                                    <span class="badge bg-primary me-2">${month}</span>
+                                    <span class="badge bg-secondary">${outcome}</span>
+                                </div>
+                                
+                                <p><strong>Location:</strong><br> ${locationName}</p>
+                                
+                                ${crime.persistent_id ? `
+                                <p class="small text-muted">Persistent ID: <code>${crime.persistent_id}</code></p>` : ''}
+                                
+                                <div class="alert alert-light small mb-0">
+                                    <strong>Outcome:</strong> ${outcome}<br>
+                                    This is the latest recorded outcome for the incident. 
+                                    Data comes directly from the Home Office police.uk feed.
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                <a href="https://www.police.uk/pu/your-area/" target="_blank" class="btn btn-outline-primary">View on official police.uk</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.insertAdjacentHTML('beforeend', html);
+            const modalEl = document.getElementById(modalId);
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+            
+            modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
         }
 
         function filterCrimeMarkers() {
@@ -1550,16 +1687,17 @@
             body.innerHTML = '<div class="text-muted small">Loading stop & search data...</div>';
             
             try {
+                // Use cached version of last-updated to avoid 429
                 let dateStr = '2025-04';
                 try {
-                    const last = await fetch('https://data.police.uk/api/crime-last-updated');
-                    const lj = await last.json();
-                    if (lj.date) dateStr = lj.date.substring(0,7);
-                } catch(_) {}
+                    const lastData = await cachedFetch('https://data.police.uk/api/crime-last-updated');
+                    if (lastData && lastData.date) dateStr = lastData.date.substring(0, 7);
+                } catch (_) {
+                    // graceful fallback — many areas still work with recent static date
+                }
                 
                 const url = `https://data.police.uk/api/stops-street?lat=${currentLat}&lng=${currentLng}&date=${dateStr}`;
-                const res = await fetch(url);
-                const stops = await res.json();
+                const stops = await cachedFetch(url);
                 
                 const totalStops = Array.isArray(stops) ? stops.length : 0;
                 countEl.textContent = `${totalStops} records`;
@@ -1584,7 +1722,8 @@
                 body.innerHTML = html;
                 
             } catch (e) {
-                body.innerHTML = '<p class="small text-muted">Stop & search data not available for every location.</p>';
+                // 429 / CORS / rate limit friendly fallback
+                body.innerHTML = '<p class="small text-muted">Stop & search data temporarily unavailable (high demand on police data service).</p>';
                 countEl.textContent = '—';
             }
         }
