@@ -11,27 +11,9 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    body { font-family: system-ui, sans-serif; }
-    #map { height: 420px; border-radius: 16px; }
-    @media (max-width: 768px) { #map { height: 340px; } }
-    .error-box {
-      background: #fee2e2;
-      color: #991b1b;
-      padding: 12px;
-      border-radius: 12px;
-      margin-top: 8px;
-      display: none;
-    }
-    .dark .error-box {
-      background: #450a0a;
-      color: #fecaca;
-    }
-  </style>
 </head>
 <body class="bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
   <div class="max-w-screen-xl mx-auto">
-    <!-- Header -->
     <div class="flex justify-between items-center px-6 py-5 border-b bg-white dark:bg-slate-900">
       <div class="flex items-center gap-3">
         <div class="w-9 h-9 bg-blue-600 rounded-2xl flex items-center justify-center text-white font-bold text-2xl">P</div>
@@ -40,20 +22,16 @@
           <div class="text-xs text-slate-500">data.police.uk • GitHub Pages</div>
         </div>
       </div>
-      <div class="flex items-center gap-3">
-        <div id="last-updated" class="text-xs px-3 py-1.5 bg-slate-200 dark:bg-slate-800 rounded-full"></div>
-        <button onclick="toggleDarkMode()" class="px-3 py-2 text-sm border rounded-2xl">🌓</button>
-      </div>
+      <button onclick="toggleDarkMode()" class="px-4 py-2 text-sm border rounded-2xl">🌓 Dark</button>
     </div>
 
-    <div class="p-4 md:p-8">
+    <div class="p-6">
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
-        <!-- Sidebar -->
+        <!-- Controls -->
         <div class="lg:col-span-3 space-y-4">
           <div class="bg-white dark:bg-slate-900 rounded-3xl border p-5 space-y-4">
             <div class="font-semibold text-sm text-slate-500">LOCATION</div>
-            
             <div class="grid grid-cols-2 gap-2">
               <button onclick="quickLocation(51.5074,-0.1278)" class="py-2 bg-slate-100 dark:bg-slate-800 rounded-2xl text-sm">London</button>
               <button onclick="quickLocation(53.4808,-2.2426)" class="py-2 bg-slate-100 dark:bg-slate-800 rounded-2xl text-sm">Manchester</button>
@@ -70,8 +48,8 @@
             </div>
 
             <div class="grid grid-cols-2 gap-3">
-              <div><input id="lat" value="51.5074" class="w-full px-3 py-2 border rounded-2xl text-sm dark:bg-slate-950"></div>
-              <div><input id="lng" value="-0.1278" class="w-full px-3 py-2 border rounded-2xl text-sm dark:bg-slate-950"></div>
+              <input id="lat" value="51.5074" class="px-3 py-2 border rounded-2xl text-sm dark:bg-slate-950">
+              <input id="lng" value="-0.1278" class="px-3 py-2 border rounded-2xl text-sm dark:bg-slate-950">
             </div>
 
             <button onclick="useMyLocation()" class="w-full py-2 text-sm border rounded-2xl">📍 Use my location</button>
@@ -96,23 +74,18 @@
           </div>
         </div>
 
-        <!-- Main -->
+        <!-- Main Content -->
         <div class="lg:col-span-9 space-y-6">
-          <!-- Error Message (Visible on mobile) -->
-          <div id="error-box" class="error-box"></div>
-
           <div id="kpi-row" class="grid grid-cols-2 md:grid-cols-4 gap-4"></div>
 
-          <!-- Map -->
           <div class="bg-white dark:bg-slate-900 rounded-3xl border p-4">
             <div class="flex justify-between mb-2">
               <div class="font-semibold">Crime Map <span id="map-subtitle"></span></div>
               <div id="total-crimes" class="text-sm px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full"></div>
             </div>
-            <div id="map" class="rounded-2xl border"></div>
+            <div id="map" class="rounded-2xl border" style="height: 420px;"></div>
           </div>
 
-          <!-- Charts -->
           <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
             <div class="lg:col-span-3 bg-white dark:bg-slate-900 rounded-3xl border p-5">
               <div class="font-semibold mb-3">Crime by Category</div>
@@ -124,7 +97,6 @@
             </div>
           </div>
 
-          <!-- Table -->
           <div class="bg-white dark:bg-slate-900 rounded-3xl border overflow-hidden">
             <div class="px-5 py-4 flex justify-between border-b">
               <div class="font-semibold">Crime List</div>
@@ -133,7 +105,7 @@
             <div class="overflow-auto max-h-[380px]">
               <table class="w-full text-sm">
                 <thead class="bg-slate-50 dark:bg-slate-800">
-                  <tr><th class="px-5 py-3 text-left">Category</th><th class="px-5 py-3 text-left">Street</th><th class="px-5 py-3 text-left">Month</th></tr>
+                  <tr><th class="px-5 py-3">Category</th><th class="px-5 py-3">Street</th><th class="px-5 py-3">Month</th></tr>
                 </thead>
                 <tbody id="crime-table"></tbody>
               </table>
@@ -145,14 +117,7 @@
   </div>
 
   <script>
-    let map, markerCluster, heatLayer, currentCrimes = [];
-
-    function showError(msg) {
-      const box = document.getElementById('error-box');
-      box.style.display = 'block';
-      box.innerHTML = `<strong>Error:</strong> ${msg}`;
-      setTimeout(() => box.style.display = 'none', 6000);
-    }
+    let map, markerCluster, currentCrimes = [];
 
     function initMap() {
       map = L.map('map').setView([51.5074, -0.1278], 13);
@@ -170,30 +135,38 @@
         const lat = parseFloat(c.location.latitude);
         const lng = parseFloat(c.location.longitude);
         const m = L.marker([lat, lng]);
-        m.bindPopup(`<b>\( {c.category}</b><br> \){c.location.street?.name || ''}`);
+        m.bindPopup(`<b>${c.category}</b><br>${c.location.street?.name || ''}`);
         markerCluster.addLayer(m);
         bounds.extend([lat, lng]);
       });
-      if (bounds.isValid()) map.fitBounds(bounds, {padding: [20,20]});
+      if (bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20] });
     }
 
     function updateKPIs(crimes) {
       const el = document.getElementById('kpi-row');
-      if (!crimes?.length) { el.innerHTML = ''; return; }
+      if (!crimes?.length) return;
       const total = crimes.length;
-      const counts = {}; crimes.forEach(c => counts[c.category] = (counts[c.category]||0)+1);
-      const top = Object.keys(counts).sort((a,b)=>counts[b]-counts[a])[0];
+      const counts = {};
+      crimes.forEach(c => counts[c.category] = (counts[c.category] || 0) + 1);
+      const top = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
       el.innerHTML = `
-        <div class="bg-white dark:bg-slate-900 border rounded-3xl p-4"><div class="text-xs text-slate-500">TOTAL</div><div class="text-3xl font-semibold">${total}</div></div>
-        <div class="bg-white dark:bg-slate-900 border rounded-3xl p-4"><div class="text-xs text-slate-500">TOP TYPE</div><div class="text-xl font-semibold">${top}</div></div>
+        <div class="bg-white dark:bg-slate-900 border rounded-3xl p-4">
+          <div class="text-xs text-slate-500">TOTAL</div>
+          <div class="text-3xl font-semibold">${total}</div>
+        </div>
+        <div class="bg-white dark:bg-slate-900 border rounded-3xl p-4">
+          <div class="text-xs text-slate-500">TOP TYPE</div>
+          <div class="text-xl font-semibold">${top}</div>
+        </div>
       `;
     }
 
     function updateCharts(crimes) {
-      const counts = {}; crimes.forEach(c => counts[c.category]=(counts[c.category]||0)+1);
+      const counts = {};
+      crimes.forEach(c => counts[c.category] = (counts[c.category] || 0) + 1);
       new Chart(document.getElementById('category-chart'), {
         type: 'doughnut',
-        data: { labels: Object.keys(counts), datasets: [{data: Object.values(counts)}] },
+        data: { labels: Object.keys(counts), datasets: [{ data: Object.values(counts) }] },
         options: { responsive: true, cutout: '65%' }
       });
     }
@@ -203,7 +176,7 @@
       tbody.innerHTML = '';
       crimes.slice(0, 80).forEach(c => {
         const row = document.createElement('tr');
-        row.innerHTML = `<td class="px-5 py-3">\( {c.category}</td><td class="px-5 py-3"> \){c.location?.street?.name || '—'}</td><td class="px-5 py-3">${c.month}</td>`;
+        row.innerHTML = `<td class="px-5 py-3">${c.category}</td><td class="px-5 py-3">${c.location?.street?.name || '—'}</td><td class="px-5 py-3">${c.month}</td>`;
         tbody.appendChild(row);
       });
     }
@@ -215,35 +188,33 @@
       const date = document.getElementById('date').value;
 
       document.getElementById('total-crimes').textContent = 'Loading...';
-      document.getElementById('error-box').style.display = 'none';
 
-      let url = `https://data.police.uk/api/crimes-street/\( {cat}?lat= \){lat}&lng=${lng}`;
+      // ✅ CORRECT URL CONSTRUCTION
+      let url = `https://data.police.uk/api/crimes-street/${cat}?lat=${lat}&lng=${lng}`;
       if (date) url += `&date=${date}`;
+
+      console.log('Request URL:', url); // You can see this in mobile dev tools if needed
 
       try {
         const res = await fetch(url);
-        const data = await res.json();
+        const crimes = await res.json();
 
-        if (!Array.isArray(data)) {
-          showError('Unexpected response from Police API. Try a different month.');
+        if (!Array.isArray(crimes) || crimes.length === 0) {
+          document.getElementById('total-crimes').textContent = 'No data';
+          alert('No crimes found. Try month 2024-06 or 2024-01.');
           return;
         }
 
-        if (data.length === 0) {
-          document.getElementById('total-crimes').textContent = '0 crimes';
-          showError('No crimes found for this location and month. Try 2024-06 or 2024-01.');
-          return;
-        }
-
-        currentCrimes = data;
+        currentCrimes = crimes;
         document.getElementById('map-subtitle').textContent = date ? `• ${date}` : '';
-        updateMap(data);
-        updateKPIs(data);
-        updateCharts(data);
-        updateTable(data);
-        document.getElementById('total-crimes').textContent = `${data.length} crimes`;
+        updateMap(crimes);
+        updateKPIs(crimes);
+        updateCharts(crimes);
+        updateTable(crimes);
+        document.getElementById('total-crimes').textContent = `${crimes.length} crimes`;
       } catch (e) {
-        showError('Failed to fetch data. The API might be slow or the month has no data yet.');
+        document.getElementById('total-crimes').textContent = 'Error';
+        alert('Failed to load data. Check your internet or try a different month.');
         console.error(e);
       }
     }
@@ -279,29 +250,23 @@
     }
 
     function exportCSV() {
-      if (!currentCrimes.length) return alert('No data to export');
+      if (!currentCrimes.length) return;
       let csv = 'category,street,month\n';
-      currentCrimes.forEach(c => csv += `\( {c.category}," \){c.location?.street?.name || ''}",${c.month}\n`);
+      currentCrimes.forEach(c => csv += `${c.category},"${c.location?.street?.name || ''}",${c.month}\n`);
       const a = document.createElement('a');
-      a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'}));
+      a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
       a.download = 'police-data.csv';
       a.click();
     }
 
     async function init() {
       initMap();
-
       try {
         const r = await fetch('https://data.police.uk/api/crime-last-updated');
         const d = await r.json();
         if (d.date) document.getElementById('last-updated').innerHTML = `Data as of <span class="font-medium">${d.date}</span>`;
       } catch (_) {}
-
-      // Auto load with a reliable month
-      setTimeout(() => {
-        document.getElementById('date').value = '2024-06';
-        loadData();
-      }, 400);
+      setTimeout(loadData, 500);
     }
 
     window.onload = init;
