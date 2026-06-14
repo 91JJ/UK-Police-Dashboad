@@ -160,6 +160,43 @@
             .hero { padding: 2.5rem 0; }
             .stat-card { padding: 1rem; }
         }
+
+        /* =============================================
+           DARK MODE OVERRIDES (Bootstrap data-bs-theme="dark")
+           Ensures cards, text, borders are readable
+           ============================================= */
+        [data-bs-theme="dark"] {
+            --bs-body-bg: #0f172a;
+            --bs-body-color: #e2e8f0;
+        }
+        
+        [data-bs-theme="dark"] .card,
+        [data-bs-theme="dark"] .stat-card,
+        [data-bs-theme="dark"] .officer-card,
+        [data-bs-theme="dark"] .force-card,
+        [data-bs-theme="dark"] .quick-card {
+            background-color: #1e2937 !important;
+            border-color: #334155 !important;
+            color: #e2e8f0;
+        }
+        
+        [data-bs-theme="dark"] .stat-card .big-number {
+            color: #60a5fa;
+        }
+        
+        [data-bs-theme="dark"] .text-muted,
+        [data-bs-theme="dark"] .data-note {
+            color: #94a3b8 !important;
+        }
+        
+        [data-bs-theme="dark"] .nav-tabs .nav-link {
+            color: #cbd5e1;
+        }
+        
+        [data-bs-theme="dark"] .nav-tabs .nav-link.active {
+            color: #60a5fa;
+            border-color: #60a5fa;
+        }
         
         .loading-spinner {
             display: inline-block;
@@ -536,7 +573,8 @@
                 <div class="tab-pane fade" id="team-tab" role="tabpanel">
                     <div class="alert alert-light small mb-3">
                         <i class="bi bi-info-circle me-1"></i> 
-                        Data from the official <code>/team</code> endpoint where published. Many areas only show team info on the force website.
+                        <strong>Your Local Team</strong> — Neighbourhood level (specific to the selected area within the force). 
+                        Data from the official <code>/team</code> endpoint where available.
                     </div>
                     <div id="team-grid" class="row g-3">
                         <!-- Officer cards populated dynamically -->
@@ -817,9 +855,11 @@
                 touchZoom: true
             }).setView([54.6, -2.2], 5.8);
             
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors',
-                maxZoom: 18
+            // Nicer modern tile layer (CartoDB Positron) — cleaner, more professional look
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; OpenStreetMap &copy; CARTO',
+                maxZoom: 19,
+                subdomains: 'abcd'
             }).addTo(forcesMap);
             
             // Add markers for major forces
@@ -1146,18 +1186,16 @@
 
         async function loadCrimeDataAndStats(lat, lng) {
             try {
-                // Get last updated date for best month
+                // Get last updated date for best month — use cachedFetch to avoid 429/CORS issues
                 let dateStr = '2025-04'; // fallback recent month
                 try {
-                    const lastRes = await fetch('https://data.police.uk/api/crime-last-updated');
-                    const lastData = await lastRes.json();
-                    if (lastData.date) dateStr = lastData.date.substring(0, 7);
+                    const lastData = await cachedFetch('https://data.police.uk/api/crime-last-updated');
+                    if (lastData && lastData.date) dateStr = lastData.date.substring(0, 7);
                 } catch (_) {}
                 
-                // Fetch crimes near location
+                // Fetch crimes near location — use cached version
                 const crimesUrl = `https://data.police.uk/api/crimes-street/all-crime?lat=${lat}&lng=${lng}&date=${dateStr}`;
-                const crimesRes = await fetch(crimesUrl);
-                currentCrimes = await crimesRes.json();
+                currentCrimes = await cachedFetch(crimesUrl);
                 
                 if (!Array.isArray(currentCrimes)) currentCrimes = [];
                 
@@ -1171,14 +1209,14 @@
                 const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
                 const topCrime = sorted.length > 0 ? sorted[0][0].replace(/-/g, ' ') : '—';
                 
-                // Simple previous month comparison (demo - one month back)
+                // Simple previous month comparison (demo - one month back) — use cache
                 let changePct = null;
                 try {
                     const prevDate = new Date(dateStr + '-01');
                     prevDate.setMonth(prevDate.getMonth() - 1);
                     const prevStr = prevDate.toISOString().substring(0, 7);
-                    const prevRes = await fetch(`https://data.police.uk/api/crimes-street/all-crime?lat=${lat}&lng=${lng}&date=${prevStr}`);
-                    const prevCrimes = await prevRes.json();
+                    const prevUrl = `https://data.police.uk/api/crimes-street/all-crime?lat=${lat}&lng=${lng}&date=${prevStr}`;
+                    const prevCrimes = await cachedFetch(prevUrl);
                     if (Array.isArray(prevCrimes) && prevCrimes.length > 0) {
                         const pct = ((total - prevCrimes.length) / prevCrimes.length * 100);
                         changePct = Math.round(pct);
@@ -1249,26 +1287,32 @@
             const socialContainer = document.getElementById('social-links');
             socialContainer.innerHTML = '';
             
-            if (!forceData || !forceData.engagement_methods) return;
+            const contactCard = document.getElementById('contact-info');
+            if (contactCard) contactCard.innerHTML = '';
             
-            forceData.engagement_methods.forEach(method => {
-                if (!method.url) return;
-                let icon = 'bi-link-45deg';
-                const title = (method.title || '').toLowerCase();
-                if (title.includes('twitter') || title.includes('x.com')) icon = 'bi-twitter-x';
-                else if (title.includes('facebook')) icon = 'bi-facebook';
-                else if (title.includes('youtube')) icon = 'bi-youtube';
-                else if (title.includes('instagram')) icon = 'bi-instagram';
-                
-                const a = document.createElement('a');
-                a.href = method.url;
-                a.target = '_blank';
-                a.className = `social-btn btn btn-sm btn-outline-primary`;
-                a.innerHTML = `<i class="bi ${icon}"></i> <span class="d-none d-md-inline">${method.title || 'Link'}</span>`;
-                socialContainer.appendChild(a);
-            });
+            if (!forceData) return;
             
-            // Add force website if present
+            // === Social links (header) ===
+            if (forceData.engagement_methods && forceData.engagement_methods.length > 0) {
+                forceData.engagement_methods.forEach(method => {
+                    if (!method.url) return;
+                    let icon = 'bi-link-45deg';
+                    const title = (method.title || '').toLowerCase();
+                    if (title.includes('twitter') || title.includes('x.com')) icon = 'bi-twitter-x';
+                    else if (title.includes('facebook')) icon = 'bi-facebook';
+                    else if (title.includes('youtube')) icon = 'bi-youtube';
+                    else if (title.includes('instagram')) icon = 'bi-instagram';
+                    
+                    const a = document.createElement('a');
+                    a.href = method.url;
+                    a.target = '_blank';
+                    a.className = `social-btn btn btn-sm btn-outline-primary`;
+                    a.innerHTML = `<i class="bi ${icon}"></i> <span class="d-none d-md-inline">${method.title || 'Link'}</span>`;
+                    socialContainer.appendChild(a);
+                });
+            }
+            
+            // Add force website
             if (forceData.url) {
                 const web = document.createElement('a');
                 web.href = forceData.url;
@@ -1276,6 +1320,38 @@
                 web.className = 'social-btn btn btn-sm btn-outline-secondary';
                 web.innerHTML = `<i class="bi bi-globe"></i> <span class="d-none d-md-inline">Force site</span>`;
                 socialContainer.appendChild(web);
+            }
+            
+            // === Full Contact card (Contact tab) - capture all available elements ===
+            if (contactCard) {
+                let html = '<div class="small">';
+                
+                if (forceData.telephone) {
+                    html += `<p class="mb-2"><i class="bi bi-telephone me-2"></i><strong>Phone:</strong> <a href="tel:${forceData.telephone}">${forceData.telephone}</a></p>`;
+                }
+                
+                if (forceData.url) {
+                    html += `<p class="mb-2"><i class="bi bi-globe me-2"></i><strong>Website:</strong> <a href="${forceData.url}" target="_blank">${forceData.url}</a></p>`;
+                }
+                
+                if (forceData.description) {
+                    html += `<p class="mb-2"><strong>About the force:</strong><br><span class="text-muted">${forceData.description.substring(0, 180)}...</span></p>`;
+                }
+                
+                if (forceData.engagement_methods && forceData.engagement_methods.length > 0) {
+                    html += `<p class="mb-1"><strong>Social channels:</strong></p><div class="d-flex flex-wrap gap-1 mb-2">`;
+                    forceData.engagement_methods.forEach(m => {
+                        if (m.url) {
+                            html += `<a href="${m.url}" target="_blank" class="btn btn-sm btn-outline-primary py-0 px-2" style="font-size:0.75rem;">${m.title || 'Link'}</a>`;
+                        }
+                    });
+                    html += `</div>`;
+                }
+                
+                html += `<p class="text-muted small mb-0">Data from data.police.uk API</p>`;
+                html += '</div>';
+                
+                contactCard.innerHTML = html;
             }
         }
 
@@ -1355,13 +1431,13 @@
         }
 
         function populateOverviewTab(neighData, forceData) {
-            // Description - use innerHTML for better formatting if descriptions contain basic markup
+            // Overview = Force-level information (as per hierarchy)
             const descEl = document.getElementById('area-description');
-            let description = 'This is your local policing area. Data is sourced from the official UK Police open data portal.';
-            if (neighData && neighData.description) {
-                description = neighData.description;
-            } else if (forceData && forceData.description) {
+            let description = 'This police force covers the selected area. Data sourced from the official UK Police open data portal.';
+            if (forceData && forceData.description) {
                 description = forceData.description;
+            } else if (neighData && neighData.description) {
+                description = neighData.description;
             }
             descEl.innerHTML = `<p class="mb-0">${description}</p>`;
             
@@ -1401,9 +1477,11 @@
                 scrollWheelZoom: true
             }).setView([currentLat, currentLng], 14);
             
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors',
-                maxZoom: 18
+            // Nicer modern tile layer (CartoDB Positron) — cleaner look, better mobile contrast than raw OSM
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; OpenStreetMap &copy; CARTO',
+                maxZoom: 19,
+                subdomains: 'abcd'
             }).addTo(crimeMap);
             
             // Add crime markers with rich click details
@@ -1618,13 +1696,11 @@
                 try {
                     let url;
                     if (currentForceId) {
-                        // For simplicity use lat/lng even for force
                         url = `https://data.police.uk/api/crimes-street/all-crime?lat=${currentLat}&lng=${currentLng}&date=${dateStr}`;
                     } else {
                         url = `https://data.police.uk/api/crimes-street/all-crime?lat=${currentLat}&lng=${currentLng}&date=${dateStr}`;
                     }
-                    const res = await fetch(url);
-                    const data = await res.json();
+                    const data = await cachedFetch(url);
                     counts.push(Array.isArray(data) ? data.length : 0);
                 } catch (_) {
                     counts.push(0);
