@@ -197,6 +197,16 @@
             color: #60a5fa;
             border-color: #60a5fa;
         }
+
+        /* Override Bootstrap .bg-white and .bg-light that break dark mode */
+        [data-bs-theme="dark"] .bg-white,
+        [data-bs-theme="dark"] .bg-light,
+        [data-bs-theme="dark"] .card-header.bg-white,
+        [data-bs-theme="dark"] .card-header.bg-light {
+            background-color: #1e2937 !important;
+            color: #e2e8f0 !important;
+            border-color: #334155 !important;
+        }
         
         .loading-spinner {
             display: inline-block;
@@ -705,7 +715,7 @@
                 }
                 return data;
             } catch (err) {
-                // Fallback to localStorage for last-updated
+                // Graceful handling for network/CORS/429 errors ("Failed to fetch")
                 if (url.includes('crime-last-updated')) {
                     const stored = localStorage.getItem('police_last_updated');
                     if (stored) {
@@ -713,7 +723,14 @@
                         if (Date.now() - parsed.timestamp < CACHE_TTL * 6) return parsed.data;
                     }
                 }
-                throw err;
+                
+                // For crime data endpoints, return safe empty value instead of throwing
+                if (url.includes('/crimes-street/') || url.includes('/stops-street')) {
+                    return [];   // safe default so UI doesn't break
+                }
+                
+                // For other endpoints, return null (callers should handle)
+                return null;
             }
         }
 
@@ -1195,9 +1212,18 @@
                 
                 // Fetch crimes near location — use cached version
                 const crimesUrl = `https://data.police.uk/api/crimes-street/all-crime?lat=${lat}&lng=${lng}&date=${dateStr}`;
-                currentCrimes = await cachedFetch(crimesUrl);
-                
-                if (!Array.isArray(currentCrimes)) currentCrimes = [];
+                const crimesData = await cachedFetch(crimesUrl);
+                currentCrimes = Array.isArray(crimesData) ? crimesData : [];
+
+                // If we have a specific neighbourhood selected and crimes exist,
+                // use the first crime's location as a better center (instead of force HQ)
+                if (currentNeighId && currentCrimes.length > 0 && currentCrimes[0].location) {
+                    const first = currentCrimes[0].location;
+                    if (first.latitude && first.longitude) {
+                        currentLat = parseFloat(first.latitude);
+                        currentLng = parseFloat(first.longitude);
+                    }
+                }
                 
                 // Calculate stats
                 const total = currentCrimes.length;
@@ -1216,8 +1242,9 @@
                     prevDate.setMonth(prevDate.getMonth() - 1);
                     const prevStr = prevDate.toISOString().substring(0, 7);
                     const prevUrl = `https://data.police.uk/api/crimes-street/all-crime?lat=${lat}&lng=${lng}&date=${prevStr}`;
-                    const prevCrimes = await cachedFetch(prevUrl);
-                    if (Array.isArray(prevCrimes) && prevCrimes.length > 0) {
+                    const prevCrimesData = await cachedFetch(prevUrl);
+                    const prevCrimes = Array.isArray(prevCrimesData) ? prevCrimesData : [];
+                    if (prevCrimes.length > 0) {
                         const pct = ((total - prevCrimes.length) / prevCrimes.length * 100);
                         changePct = Math.round(pct);
                     }
@@ -1357,46 +1384,101 @@
 
         async function loadLocalTeam(forceId, neighId) {
             const grid = document.getElementById('team-grid');
-            grid.innerHTML = `<div class="col-12 text-center py-3"><div class="loading-spinner mx-auto"></div><div class="small text-muted mt-2">Loading local policing team...</div></div>`;
+            grid.innerHTML = `<div class="col-12 text-center py-3"><div class="loading-spinner mx-auto"></div><div class="small text-muted mt-2">Loading local policing team, events &amp; priorities...</div></div>`;
             
             try {
-                const res = await fetch(`https://data.police.uk/api/${forceId}/${neighId}/team`);
-                if (!res.ok) throw new Error('No team data');
-                const team = await res.json();
-                
+                // Fetch team + events + priorities in parallel (like in HA integration)
+                const [teamRes, eventsRes, prioritiesRes] = await Promise.allSettled([
+                    cachedFetch(`https://data.police.uk/api/${forceId}/${neighId}/team`),
+                    cachedFetch(`https://data.police.uk/api/${forceId}/${neighId}/events`),
+                    cachedFetch(`https://data.police.uk/api/${forceId}/${neighId}/priorities`)
+                ]);
+
+                const team = (teamRes.status === 'fulfilled' && Array.isArray(teamRes.value)) ? teamRes.value : [];
+                const events = (eventsRes.status === 'fulfilled' && Array.isArray(eventsRes.value)) ? eventsRes.value : [];
+                const priorities = (prioritiesRes.status === 'fulfilled' && Array.isArray(prioritiesRes.value)) ? prioritiesRes.value : [];
+
                 grid.innerHTML = '';
-                
-                if (!team || team.length === 0) {
-                    grid.innerHTML = '<div class="col-12"><div class="alert alert-light">No detailed team members published for this neighbourhood yet.</div></div>';
-                    return;
-                }
-                
-                team.forEach(member => {
-                    const initials = (member.name || 'Officer').split(' ').map(n => n[0]).join('').substring(0,2).toUpperCase();
-                    const col = document.createElement('div');
-                    col.className = 'col-6 col-md-4 col-lg-3';
-                    col.innerHTML = `
-                        <div class="officer-card h-100">
-                            <div class="officer-avatar">${initials}</div>
-                            <h6 class="mb-1 fw-semibold">${member.name || 'Team Member'}</h6>
-                            <div class="text-primary small fw-medium">${member.rank || member.neighbourhood_role || 'Police Officer'}</div>
-                            ${member.bio ? `<p class="small text-muted mt-2 mb-0">${member.bio.substring(0,80)}...</p>` : ''}
-                            <button class="btn btn-sm btn-outline-primary mt-2 w-100" onclick="showOfficerModal('${(member.name || 'Officer').replace(/'/g, "\\'")}', '${(member.rank || '').replace(/'/g, "\\'")}')">
-                                View profile
-                            </button>
+
+                // === Officers ===
+                if (team.length > 0) {
+                    const officersHTML = team.map(member => {
+                        const initials = (member.name || 'Officer').split(' ').map(n => n[0]).join('').substring(0,2).toUpperCase();
+                        return `
+                            <div class="col-6 col-md-4 col-lg-3">
+                                <div class="officer-card h-100">
+                                    <div class="officer-avatar">${initials}</div>
+                                    <h6 class="mb-1 fw-semibold">${member.name || 'Team Member'}</h6>
+                                    <div class="text-primary small fw-medium">${member.rank || member.neighbourhood_role || 'Police Officer'}</div>
+                                    <button class="btn btn-sm btn-outline-primary mt-2 w-100" onclick="showOfficerModal('${(member.name || 'Officer').replace(/'/g, "\\'")}', '${(member.rank || '').replace(/'/g, "\\'")}')">
+                                        View profile
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                    
+                    grid.innerHTML += `
+                        <div class="col-12 mb-2"><h6 class="fw-semibold">Your Local Officers</h6></div>
+                        ${officersHTML}
+                    `;
+                } else {
+                    grid.innerHTML += `
+                        <div class="col-12 mb-3">
+                            <div class="alert alert-light small mb-0">No officer details published for this neighbourhood via the open API.</div>
                         </div>
                     `;
-                    grid.appendChild(col);
-                });
+                }
+
+                // === Priorities ===
+                if (priorities.length > 0) {
+                    let prioHTML = `<div class="col-12 mt-3"><h6 class="fw-semibold">Current Policing Priorities</h6></div>`;
+                    priorities.slice(0, 3).forEach(p => {
+                        prioHTML += `
+                            <div class="col-12 col-md-6">
+                                <div class="card card-body small mb-2">
+                                    <strong>${p.issue || 'Priority'}</strong><br>
+                                    <span class="text-muted">${p.action || p.description || ''}</span>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    grid.innerHTML += prioHTML;
+                }
+
+                // === Events / Meetings ===
+                if (events.length > 0) {
+                    let eventHTML = `<div class="col-12 mt-3"><h6 class="fw-semibold">Upcoming Events &amp; Meetings</h6></div>`;
+                    events.slice(0, 4).forEach(ev => {
+                        const date = ev.date || '';
+                        eventHTML += `
+                            <div class="col-12 col-md-6">
+                                <div class="card card-body small mb-2">
+                                    <strong>${ev.title || 'Event'}</strong><br>
+                                    <span class="text-muted">${date} ${ev.location ? '• ' + ev.location : ''}</span>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    grid.innerHTML += eventHTML;
+                }
+
+                if (team.length === 0 && events.length === 0 && priorities.length === 0) {
+                    grid.innerHTML = `
+                        <div class="col-12">
+                            <div class="alert alert-light border">
+                                Detailed neighbourhood team, events and priorities are only available for some areas via the open API.
+                                Check the official police.uk page for this neighbourhood for the latest information.
+                            </div>
+                        </div>`;
+                }
                 
             } catch (err) {
                 grid.innerHTML = `
                     <div class="col-12">
                         <div class="alert alert-light border">
-                            <i class="bi bi-people me-2"></i>
-                            <strong>Local team data not available for this neighbourhood.</strong><br>
-                            <span class="small">Many neighbourhoods publish team information on the official police.uk site or force website. 
-                            The open API only returns detailed officers for some areas.</span>
+                            <strong>Could not load neighbourhood details.</strong><br>
+                            <span class="small">Team, events and priorities data is limited in the open API. Many forces publish richer information directly on police.uk.</span>
                         </div>
                     </div>`;
             }
@@ -1487,15 +1569,18 @@
             // Add crime markers with rich click details
             addCrimeMarkersToMap();
             
-            // Auto zoom to fit crimes when available (much better UX)
-            setTimeout(() => {
-                if (currentCrimes.length > 3 && crimeMarkers.length > 0) {
-                    try {
-                        const group = L.featureGroup(crimeMarkers);
-                        crimeMap.fitBounds(group.getBounds().pad(0.15), { maxZoom: 16 });
-                    } catch (_) {}
+            // Strongly prefer fitting to actual crimes (fixes "shows central force area" issue)
+            if (currentCrimes.length > 2 && crimeMarkers.length > 0) {
+                try {
+                    const group = L.featureGroup(crimeMarkers);
+                    crimeMap.fitBounds(group.getBounds().pad(0.2), { maxZoom: 15, animate: false });
+                } catch (_) {
+                    // fallback to currentLat/Lng
+                    crimeMap.setView([currentLat, currentLng], 13);
                 }
-            }, 400);
+            } else {
+                crimeMap.setView([currentLat, currentLng], 13);
+            }
         }
 
         function addCrimeMarkersToMap(filteredCrimes = null) {
