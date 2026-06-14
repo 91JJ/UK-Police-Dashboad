@@ -10,7 +10,6 @@
 </head>
 <body>
   <div class="container">
-    <!-- Header -->
     <header>
       <div class="flex items-center gap-3">
         <div class="logo">P</div>
@@ -45,17 +44,12 @@
         </div>
 
         <div>
-          <label>Police Force</label>
-          <select id="force-select" onchange="loadNeighbourhoods()">
-            <option value="">Select Force</option>
-          </select>
+          <label>Latitude</label>
+          <input id="lat" value="51.5074">
         </div>
-
         <div>
-          <label>Neighbourhood</label>
-          <select id="neighbourhood-select">
-            <option value="">All areas</option>
-          </select>
+          <label>Longitude</label>
+          <input id="lng" value="-0.1278">
         </div>
 
         <div>
@@ -63,12 +57,7 @@
           <input id="date" type="month">
         </div>
       </div>
-
-      <div class="flex gap-3 mt-4">
-        <input id="lat" placeholder="Latitude" class="input">
-        <input id="lng" placeholder="Longitude" class="input">
-        <button onclick="loadAllData()" class="btn-primary">Load Data</button>
-      </div>
+      <button onclick="loadAllData()" class="btn-primary mt-4 w-full">Load Data</button>
     </div>
 
     <!-- Tabs -->
@@ -79,12 +68,12 @@
       <div onclick="switchTab(3)" class="tab" id="tab-3">Stop &amp; Search</div>
     </div>
 
-    <!-- Crime Map Tab -->
+    <!-- Crime Map Content -->
     <div id="content-0" class="tab-content">
       <div class="kpi-grid" id="kpi-row"></div>
 
       <div class="card">
-        <div class="flex justify-between items-center mb-3">
+        <div class="flex justify-between mb-3">
           <h3>Crime Map</h3>
           <div id="total-crimes" class="badge"></div>
         </div>
@@ -116,34 +105,10 @@
       </div>
     </div>
 
-    <!-- Other tabs (basic structure - will be enhanced) -->
-    <div id="content-1" class="tab-content hidden">
-      <div class="card">
-        <h3>Forces</h3>
-        <select id="force-details-select" onchange="loadForceDetails()"></select>
-        <div id="force-info" class="mt-4"></div>
-      </div>
-    </div>
-
-    <div id="content-2" class="tab-content hidden">
-      <div class="card">
-        <h3>Compare Forces</h3>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <select id="compare1"></select>
-          <select id="compare2"></select>
-        </div>
-        <button onclick="compareForces()" class="btn-primary mt-4">Compare</button>
-        <div id="compare-results" class="mt-4"></div>
-      </div>
-    </div>
-
-    <div id="content-3" class="tab-content hidden">
-      <div class="card">
-        <h3>Stop &amp; Search</h3>
-        <button onclick="loadStopAndSearch()" class="btn-primary">Load for current location</button>
-        <div id="sas-results" class="mt-4"></div>
-      </div>
-    </div>
+    <!-- Other tabs (basic for now) -->
+    <div id="content-1" class="tab-content hidden"><div class="card">Forces tab content</div></div>
+    <div id="content-2" class="tab-content hidden"><div class="card">Compare tab content</div></div>
+    <div id="content-3" class="tab-content hidden"><div class="card">Stop &amp; Search tab content</div></div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
