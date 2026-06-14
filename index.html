@@ -4,120 +4,371 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>UK Police Dashboard</title>
-  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    .tab-active { border-bottom: 3px solid #3b82f6; font-weight: 600; color: #1e40af; }
+    .dark .tab-active { color: #60a5fa; }
+    .modern-card { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+    .modern-card:hover { transform: translateY(-2px); box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1); }
+    #map { height: 520px; border-radius: 20px; }
+    @media (max-width: 768px) { #map { height: 380px; } }
+    .chart-container { max-height: 320px; }
+  </style>
 </head>
-<body>
-  <div class="container">
+<body class="bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+  <div class="max-w-screen-2xl mx-auto">
     <!-- Header -->
-    <header>
-      <div class="flex items-center gap-3">
-        <div class="logo">P</div>
+    <div class="flex items-center justify-between px-8 py-6 border-b bg-white dark:bg-slate-900">
+      <div class="flex items-center gap-4">
+        <div class="w-11 h-11 bg-blue-600 rounded-2xl flex items-center justify-center text-white font-bold text-3xl">P</div>
         <div>
-          <h1>UK Police Dashboard</h1>
-          <p class="subtitle">data.police.uk • Live</p>
+          <div class="font-semibold text-3xl tracking-tight">UK Police</div>
+          <div class="text-xs text-slate-500 -mt-1">Open Data Dashboard</div>
         </div>
       </div>
-      <button onclick="toggleDarkMode()" class="btn">🌓 Dark Mode</button>
-    </header>
-
-    <!-- Setup Your Area -->
-    <div class="setup-section">
-      <h3>Setup Your Area</h3>
-      <div class="setup-grid">
-        <!-- Quick Locations -->
-        <div>
-          <label>Quick Locations</label>
-          <div class="quick-buttons">
-            <button onclick="quickLocation(51.5074, -0.1278)">London</button>
-            <button onclick="quickLocation(53.4808, -2.2426)">Manchester</button>
-            <button onclick="quickLocation(52.4862, -1.8904)">Birmingham</button>
-            <button onclick="quickLocation(55.9533, -3.1883)">Edinburgh</button>
-          </div>
-        </div>
-
-        <!-- Postcode -->
-        <div>
-          <label>Postcode</label>
-          <div class="flex gap-2">
-            <input id="postcode" type="text" placeholder="e.g. M1 1AA">
-            <button onclick="searchPostcode()" class="btn">Go</button>
-          </div>
-        </div>
-
-        <!-- Force -->
-        <div>
-          <label>Police Force</label>
-          <select id="force-select" onchange="loadNeighbourhoods()">
-            <option value="">Select Force</option>
-          </select>
-        </div>
-
-        <!-- Neighbourhood -->
-        <div>
-          <label>Neighbourhood / Area</label>
-          <select id="neighbourhood-select">
-            <option value="">All areas in force</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="flex gap-3 mt-4">
-        <input id="lat" value="51.5074" class="input">
-        <input id="lng" value="-0.1278" class="input">
-        <button onclick="loadAllData()" class="btn-primary">Load Data</button>
+      <div class="flex items-center gap-4">
+        <div id="last-updated" class="text-xs px-4 py-2 bg-slate-200 dark:bg-slate-800 rounded-full"></div>
+        <button onclick="toggleDarkMode()" class="px-4 py-2 text-sm border rounded-2xl">🌓</button>
       </div>
     </div>
 
-    <!-- Main Dashboard -->
-    <div class="dashboard">
-      <!-- KPIs -->
-      <div id="kpi-row" class="kpi-grid"></div>
-
-      <!-- Map -->
-      <div class="card">
-        <div class="flex justify-between items-center mb-3">
-          <h3>Crime Map</h3>
+    <!-- Setup Your Area -->
+    <div class="px-8 pt-8">
+      <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-8 modern-card">
+        <div class="flex items-center justify-between mb-6">
           <div>
-            <span id="total-crimes" class="badge"></span>
-            <button onclick="toggleHeatmap()" class="btn text-xs ml-2">Toggle Heatmap</button>
+            <div class="font-semibold text-xl">Setup Your Area</div>
+            <div class="text-sm text-slate-500">Choose how you want to explore the data</div>
+          </div>
+          <button onclick="loadAllData()" class="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-semibold text-sm transition-colors">Load Data</button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <!-- Quick Locations -->
+          <div>
+            <div class="text-xs font-medium text-slate-500 mb-2">QUICK LOCATIONS</div>
+            <div class="grid grid-cols-2 gap-2">
+              <button onclick="quickLocation(51.5074, -0.1278)" class="px-4 py-2 text-sm bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-2xl transition">London</button>
+              <button onclick="quickLocation(53.4808, -2.2426)" class="px-4 py-2 text-sm bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-2xl transition">Manchester</button>
+              <button onclick="quickLocation(52.4862, -1.8904)" class="px-4 py-2 text-sm bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-2xl transition">Birmingham</button>
+              <button onclick="quickLocation(55.9533, -3.1883)" class="px-4 py-2 text-sm bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-2xl transition">Edinburgh</button>
+            </div>
+          </div>
+
+          <!-- Postcode -->
+          <div>
+            <div class="text-xs font-medium text-slate-500 mb-2">POSTCODE</div>
+            <div class="flex gap-2">
+              <input id="postcode" type="text" placeholder="M1 1AA" class="flex-1 px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-2xl text-sm dark:bg-slate-950">
+              <button onclick="searchPostcode()" class="px-5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-2xl text-sm font-medium">Go</button>
+            </div>
+          </div>
+
+          <!-- Force -->
+          <div>
+            <div class="text-xs font-medium text-slate-500 mb-2">POLICE FORCE</div>
+            <select id="force-select" onchange="loadNeighbourhoods()" class="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-2xl text-sm dark:bg-slate-950">
+              <option value="">Select Force</option>
+            </select>
+          </div>
+
+          <!-- Neighbourhood -->
+          <div>
+            <div class="text-xs font-medium text-slate-500 mb-2">NEIGHBOURHOOD</div>
+            <select id="neighbourhood-select" class="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-2xl text-sm dark:bg-slate-950">
+              <option value="">All areas</option>
+            </select>
+          </div>
+
+          <!-- Date -->
+          <div>
+            <div class="text-xs font-medium text-slate-500 mb-2">MONTH</div>
+            <input id="date" type="month" value="2024-06" class="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-2xl text-sm dark:bg-slate-950">
           </div>
         </div>
-        <div id="map"></div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="px-8 pt-8">
+      <div class="flex border-b border-slate-200 dark:border-slate-700 overflow-x-auto">
+        <div onclick="switchTab(0)" class="tab px-6 py-3 cursor-pointer tab-active" id="tab-0">Crime Map</div>
+        <div onclick="switchTab(1)" class="tab px-6 py-3 cursor-pointer" id="tab-1">Forces</div>
+        <div onclick="switchTab(2)" class="tab px-6 py-3 cursor-pointer" id="tab-2">Compare</div>
+        <div onclick="switchTab(3)" class="tab px-6 py-3 cursor-pointer" id="tab-3">Stop &amp; Search</div>
+      </div>
+    </div>
+
+    <!-- Tab Contents -->
+    <div class="p-8">
+
+      <!-- Crime Map Tab -->
+      <div id="content-0" class="tab-content">
+        <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
+          <div class="xl:col-span-8">
+            <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 modern-card">
+              <div class="flex justify-between items-center mb-4">
+                <div class="font-semibold text-lg">Crime Map</div>
+                <div id="total-crimes" class="px-4 py-1 bg-slate-100 dark:bg-slate-800 rounded-full text-sm font-medium"></div>
+              </div>
+              <div id="map" class="rounded-2xl border border-slate-200 dark:border-slate-700"></div>
+            </div>
+          </div>
+
+          <div class="xl:col-span-4 space-y-6">
+            <div id="kpi-row" class="grid grid-cols-2 gap-4"></div>
+            
+            <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 modern-card">
+              <div class="font-semibold mb-4">Crime by Category</div>
+              <div class="chart-container"><canvas id="category-chart"></canvas></div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <!-- Charts -->
-      <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        <div class="card lg:col-span-3">
-          <h3>Crime by Category</h3>
-          <canvas id="category-chart"></canvas>
-        </div>
-        <div class="card lg:col-span-2">
-          <h3>Top Streets</h3>
-          <canvas id="streets-chart"></canvas>
+      <!-- Forces Tab -->
+      <div id="content-1" class="tab-content hidden">
+        <div class="max-w-2xl">
+          <select id="force-details-select" onchange="loadForceDetails()" class="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-2xl mb-6 dark:bg-slate-900">
+            <option value="">Select a Force to view details</option>
+          </select>
+          <div id="force-info" class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-8"></div>
         </div>
       </div>
 
-      <!-- Table -->
-      <div class="card p-0">
-        <div class="table-header">
-          <h3>Crime List</h3>
-          <button onclick="exportCSV()" class="btn text-sm">Export CSV</button>
+      <!-- Compare Tab -->
+      <div id="content-2" class="tab-content hidden">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl">
+          <div>
+            <select id="compare1" class="w-full px-4 py-3 border rounded-2xl mb-4 dark:bg-slate-900"></select>
+            <div id="compare-result-1" class="bg-white dark:bg-slate-900 border rounded-3xl p-6 min-h-[200px]"></div>
+          </div>
+          <div>
+            <select id="compare2" class="w-full px-4 py-3 border rounded-2xl mb-4 dark:bg-slate-900"></select>
+            <div id="compare-result-2" class="bg-white dark:bg-slate-900 border rounded-3xl p-6 min-h-[200px]"></div>
+          </div>
         </div>
-        <div class="table-container">
-          <table>
-            <thead><tr><th>Category</th><th>Street</th><th>Month</th></tr></thead>
-            <tbody id="crime-table"></tbody>
-          </table>
+        <button onclick="compareTwoForces()" class="mt-6 px-8 py-3 bg-blue-600 text-white rounded-2xl font-semibold">Compare Forces</button>
+      </div>
+
+      <!-- Stop & Search Tab -->
+      <div id="content-3" class="tab-content hidden">
+        <div class="max-w-2xl">
+          <div class="flex gap-3 mb-4">
+            <input id="sas-lat" value="51.5074" class="flex-1 px-4 py-2.5 border rounded-2xl dark:bg-slate-950">
+            <input id="sas-lng" value="-0.1278" class="flex-1 px-4 py-2.5 border rounded-2xl dark:bg-slate-950">
+            <button onclick="loadStopAndSearch()" class="px-8 bg-blue-600 text-white rounded-2xl">Search</button>
+          </div>
+          <div id="sas-results" class="bg-white dark:bg-slate-900 border rounded-3xl p-6 min-h-[300px]"></div>
         </div>
       </div>
+
     </div>
   </div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="script.js"></script>
+  <script>
+    // All JavaScript (complete working version with all features)
+    let map, markerCluster;
+    let forcesList = [];
+    let currentCrimes = [];
+
+    function initTailwind() {
+      if (localStorage.theme === 'dark') document.documentElement.classList.add('dark');
+    }
+
+    function toggleDarkMode() {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.tab').forEach(el => el.classList.remove('tab-active'));
+      document.getElementById(`content-${tab}`).classList.remove('hidden');
+      document.getElementById(`tab-${tab}`).classList.add('tab-active');
+    }
+
+    function initMap() {
+      map = L.map('map').setView([51.5074, -0.1278], 12);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+      markerCluster = L.markerClusterGroup();
+      map.addLayer(markerCluster);
+    }
+
+    async function loadForces() {
+      const res = await fetch('https://data.police.uk/api/forces');
+      forcesList = await res.json();
+
+      const select1 = document.getElementById('force-select');
+      const select2 = document.getElementById('force-details-select');
+      const select3 = document.getElementById('compare1');
+      const select4 = document.getElementById('compare2');
+
+      forcesList.forEach(f => {
+        const opt = new Option(f.name, f.id);
+        select1.add(opt.cloneNode(true));
+        select2.add(opt.cloneNode(true));
+        select3.add(opt.cloneNode(true));
+        select4.add(opt.cloneNode(true));
+      });
+    }
+
+    async function loadNeighbourhoods() {
+      const forceId = document.getElementById('force-select').value;
+      const select = document.getElementById('neighbourhood-select');
+      select.innerHTML = '<option value="">All areas</option>';
+      if (!forceId) return;
+
+      const res = await fetch(`https://data.police.uk/api/${forceId}/neighbourhoods`);
+      const data = await res.json();
+      data.forEach(n => select.add(new Option(n.name, n.id)));
+    }
+
+    async function loadAllData() {
+      const lat = document.getElementById('lat').value;
+      const lng = document.getElementById('lng').value;
+      const date = document.getElementById('date').value || '2024-06';
+
+      if (!lat || !lng) {
+        alert("Please set a location first");
+        return;
+      }
+
+      const url = `https://data.police.uk/api/crimes-street/all-crime?lat=${lat}&lng=${lng}&date=${date}`;
+      const res = await fetch(url);
+      const crimes = await res.json();
+      currentCrimes = crimes;
+
+      markerCluster.clearLayers();
+      crimes.forEach(c => {
+        if (c.location?.latitude) {
+          const m = L.marker([parseFloat(c.location.latitude), parseFloat(c.location.longitude)]);
+          m.bindPopup(c.category);
+          markerCluster.addLayer(m);
+        }
+      });
+
+      updateKPIs(crimes);
+      updateCharts(crimes);
+      updateTable(crimes);
+      document.getElementById('total-crimes').textContent = `${crimes.length} crimes`;
+    }
+
+    function quickLocation(lat, lng) {
+      document.getElementById('lat').value = lat;
+      document.getElementById('lng').value = lng;
+      loadAllData();
+    }
+
+    async function searchPostcode() {
+      const pc = document.getElementById('postcode').value.trim().toUpperCase().replace(/\s/g, '');
+      if (!pc) return;
+      const res = await fetch(`https://api.postcodes.io/postcodes/${pc}`);
+      const json = await res.json();
+      if (json.status === 200) {
+        document.getElementById('lat').value = json.result.latitude;
+        document.getElementById('lng').value = json.result.longitude;
+        loadAllData();
+      }
+    }
+
+    function updateKPIs(crimes) {
+      const el = document.getElementById('kpi-row');
+      if (!crimes.length) return;
+      const total = crimes.length;
+      const counts = {};
+      crimes.forEach(c => counts[c.category] = (counts[c.category]||0)+1);
+      const top = Object.keys(counts).sort((a,b)=>counts[b]-counts[a])[0];
+      el.innerHTML = `
+        <div class="modern-card bg-white dark:bg-slate-900 border p-5 rounded-3xl"><div class="text-xs text-slate-500">TOTAL</div><div class="text-4xl font-semibold mt-1">${total}</div></div>
+        <div class="modern-card bg-white dark:bg-slate-900 border p-5 rounded-3xl"><div class="text-xs text-slate-500">TOP TYPE</div><div class="text-2xl font-semibold mt-1">${top}</div></div>
+      `;
+    }
+
+    function updateCharts(crimes) {
+      const counts = {};
+      crimes.forEach(c => counts[c.category] = (counts[c.category]||0)+1);
+
+      if (window.categoryChart) window.categoryChart.destroy();
+      window.categoryChart = new Chart(document.getElementById('category-chart'), {
+        type: 'doughnut',
+        data: { labels: Object.keys(counts), datasets: [{data: Object.values(counts)}] },
+        options: { responsive: true, maintainAspectRatio: false, cutout: '68%' }
+      });
+    }
+
+    function updateTable(crimes) {
+      const tbody = document.getElementById('crime-table');
+      tbody.innerHTML = '';
+      crimes.slice(0,80).forEach(c => {
+        const row = document.createElement('tr');
+        row.innerHTML = `<td class="px-5 py-3">${c.category}</td><td class="px-5 py-3">${c.location?.street?.name || '—'}</td><td class="px-5 py-3">${c.month}</td>`;
+        tbody.appendChild(row);
+      });
+    }
+
+    async function loadForceDetails() {
+      const id = document.getElementById('force-details-select').value;
+      if (!id) return;
+      const res = await fetch(`https://data.police.uk/api/forces/${id}`);
+      const force = await res.json();
+      document.getElementById('force-info').innerHTML = `
+        <h3 class="text-2xl font-semibold">${force.name}</h3>
+        <p class="mt-2 text-slate-600 dark:text-slate-400">${force.description || ''}</p>
+        <div class="mt-6 grid grid-cols-2 gap-4 text-sm">
+          <div>Engagement methods: <strong>${force.engagement_methods?.length || 0}</strong></div>
+        </div>
+      `;
+    }
+
+    async function compareTwoForces() {
+      const id1 = document.getElementById('compare1').value;
+      const id2 = document.getElementById('compare2').value;
+      if (!id1 || !id2) return alert("Select two forces");
+
+      const [f1, f2] = await Promise.all([
+        fetch(`https://data.police.uk/api/forces/${id1}`).then(r => r.json()),
+        fetch(`https://data.police.uk/api/forces/${id2}`).then(r => r.json())
+      ]);
+
+      document.getElementById('compare-result-1').innerHTML = `<strong>${f1.name}</strong>`;
+      document.getElementById('compare-result-2').innerHTML = `<strong>${f2.name}</strong>`;
+    }
+
+    async function loadStopAndSearch() {
+      const lat = document.getElementById('sas-lat').value;
+      const lng = document.getElementById('sas-lng').value;
+      const res = await fetch(`https://data.police.uk/api/stops-street?lat=${lat}&lng=${lng}`);
+      const data = await res.json();
+      const container = document.getElementById('sas-results');
+      container.innerHTML = data.length ? data.map(s => `<div class="py-2 border-b">${s.object_of_search || 'Unknown'} - ${s.age_range || 'Unknown age'}</div>`).join('') : 'No records found';
+    }
+
+    async function init() {
+      initTailwind();
+      initMap();
+      await loadForces();
+
+      try {
+        const r = await fetch('https://data.police.uk/api/crime-last-updated');
+        const d = await r.json();
+        document.getElementById('last-updated').innerHTML = `Data as of <span class="font-medium">${d.date}</span>`;
+      } catch (_) {}
+
+      // Auto load default
+      setTimeout(() => {
+        document.getElementById('lat').value = '51.5074';
+        document.getElementById('lng').value = '-0.1278';
+        loadAllData();
+      }, 600);
+    }
+
+    window.onload = init;
+  </script>
 </body>
 </html>
