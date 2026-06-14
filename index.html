@@ -3,116 +3,107 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>UK Police Dashboard</title>
+  <title>UK Police • Your Area</title>
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
 </head>
 <body>
   <div class="container">
+    <!-- Header -->
     <header>
       <div class="flex items-center gap-3">
         <div class="logo">P</div>
         <div>
-          <h1>UK Police Dashboard</h1>
-          <p class="subtitle">data.police.uk • GitHub Pages</p>
+          <h1>UK Police</h1>
+          <p class="subtitle">Find your local policing area</p>
         </div>
       </div>
-      <button onclick="toggleDarkMode()" class="btn">🌓 Dark</button>
     </header>
 
-    <!-- Setup Your Area -->
-    <div class="setup-section">
-      <h3>Setup Your Area</h3>
-      <div class="setup-grid">
+    <!-- Find Your Area (replicates police.uk flow) -->
+    <div class="card">
+      <h2>Find your local policing area</h2>
+      <div class="area-selector">
+        <!-- Quick select -->
         <div>
-          <label>Quick Locations</label>
-          <div class="quick-buttons">
-            <button onclick="quickLocation(51.5074, -0.1278)">London</button>
-            <button onclick="quickLocation(53.4808, -2.2426)">Manchester</button>
-            <button onclick="quickLocation(52.4862, -1.8904)">Birmingham</button>
-            <button onclick="quickLocation(55.9533, -3.1883)">Edinburgh</button>
+          <label>Quick select</label>
+          <div class="quick-grid">
+            <button onclick="selectArea(51.5074, -0.1278, 'Metropolitan Police')">London</button>
+            <button onclick="selectArea(53.4808, -2.2426, 'Greater Manchester Police')">Manchester</button>
+            <button onclick="selectArea(52.4862, -1.8904, 'West Midlands Police')">Birmingham</button>
+            <button onclick="selectArea(55.9533, -3.1883, 'Police Scotland')">Edinburgh</button>
           </div>
         </div>
 
+        <!-- Postcode -->
         <div>
-          <label>Postcode</label>
+          <label>Search by postcode</label>
           <div class="flex gap-2">
-            <input id="postcode" type="text" placeholder="M1 1AA">
-            <button onclick="searchPostcode()" class="btn">Go</button>
+            <input id="postcode" type="text" placeholder="e.g. M1 1AA">
+            <button onclick="searchByPostcode()" class="btn">Search</button>
           </div>
         </div>
 
+        <!-- Force + Neighbourhood -->
         <div>
-          <label>Latitude</label>
-          <input id="lat" value="51.5074">
+          <label>Police Force</label>
+          <select id="force-select" onchange="loadNeighbourhoods()">
+            <option value="">Select force...</option>
+          </select>
         </div>
         <div>
-          <label>Longitude</label>
-          <input id="lng" value="-0.1278">
-        </div>
-
-        <div>
-          <label>Month</label>
-          <input id="date" type="month">
+          <label>Neighbourhood / Area</label>
+          <select id="neighbourhood-select">
+            <option value="">All areas</option>
+          </select>
         </div>
       </div>
-      <button onclick="loadAllData()" class="btn-primary mt-4 w-full">Load Data</button>
+
+      <button onclick="loadAreaDashboard()" class="btn-primary mt-4 w-full">Show Area Dashboard</button>
     </div>
 
-    <!-- Tabs -->
-    <div class="tabs">
-      <div onclick="switchTab(0)" class="tab active" id="tab-0">Crime Map</div>
-      <div onclick="switchTab(1)" class="tab" id="tab-1">Forces</div>
-      <div onclick="switchTab(2)" class="tab" id="tab-2">Compare</div>
-      <div onclick="switchTab(3)" class="tab" id="tab-3">Stop &amp; Search</div>
-    </div>
-
-    <!-- Crime Map Content -->
-    <div id="content-0" class="tab-content">
-      <div class="kpi-grid" id="kpi-row"></div>
-
-      <div class="card">
-        <div class="flex justify-between mb-3">
-          <h3>Crime Map</h3>
-          <div id="total-crimes" class="badge"></div>
+    <!-- Area Dashboard (appears after selection) -->
+    <div id="dashboard" class="hidden">
+      <div class="area-header">
+        <div>
+          <h2 id="area-name">Your Local Area</h2>
+          <p id="area-force" class="text-slate-500"></p>
         </div>
-        <div id="map"></div>
+        <div id="area-contact"></div>
       </div>
 
-      <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        <div class="card lg:col-span-3">
+      <!-- Stats + Graphs -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="label">Total Crimes (last month)</div>
+          <div id="total-crimes" class="big-number">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Top Crime Type</div>
+          <div id="top-crime" class="big-number">—</div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="card">
           <h3>Crime by Category</h3>
           <canvas id="category-chart"></canvas>
         </div>
-        <div class="card lg:col-span-2">
-          <h3>Top Streets</h3>
-          <canvas id="streets-chart"></canvas>
+        <div class="card">
+          <h3>Recent Crime Map</h3>
+          <div id="map" style="height: 380px; border-radius: 12px;"></div>
         </div>
       </div>
 
-      <div class="card p-0">
-        <div class="table-header">
-          <h3>Recent Crimes</h3>
-          <button onclick="exportCSV()" class="btn text-sm">Export CSV</button>
-        </div>
-        <div class="table-container">
-          <table>
-            <thead><tr><th>Category</th><th>Street</th><th>Month</th></tr></thead>
-            <tbody id="crime-table"></tbody>
-          </table>
-        </div>
+      <!-- Extra sections -->
+      <div class="card">
+        <h3>Stop &amp; Search (last month)</h3>
+        <div id="stop-search-summary"></div>
       </div>
     </div>
-
-    <!-- Other tabs (basic for now) -->
-    <div id="content-1" class="tab-content hidden"><div class="card">Forces tab content</div></div>
-    <div id="content-2" class="tab-content hidden"><div class="card">Compare tab content</div></div>
-    <div id="content-3" class="tab-content hidden"><div class="card">Stop &amp; Search tab content</div></div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="script.js"></script>
 </body>
