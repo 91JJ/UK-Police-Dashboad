@@ -7,12 +7,11 @@
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
 </head>
 <body>
   <div class="container">
     <!-- Header -->
-    <header class="header">
+    <header>
       <div class="flex items-center gap-3">
         <div class="logo">P</div>
         <div>
@@ -20,13 +19,24 @@
           <p class="subtitle">data.police.uk • Live</p>
         </div>
       </div>
-      <button onclick="toggleDarkMode()" class="btn">🌓 Dark</button>
+      <button onclick="toggleDarkMode()" class="btn">🌓 Dark Mode</button>
     </header>
 
     <!-- Setup Your Area -->
-    <div class="setup-card">
-      <h3 class="section-title">SETUP YOUR AREA</h3>
+    <div class="setup-section">
+      <h3>Setup Your Area</h3>
       <div class="setup-grid">
+        <!-- Quick Locations -->
+        <div>
+          <label>Quick Locations</label>
+          <div class="quick-buttons">
+            <button onclick="quickLocation(51.5074, -0.1278)">London</button>
+            <button onclick="quickLocation(53.4808, -2.2426)">Manchester</button>
+            <button onclick="quickLocation(52.4862, -1.8904)">Birmingham</button>
+            <button onclick="quickLocation(55.9533, -3.1883)">Edinburgh</button>
+          </div>
+        </div>
+
         <!-- Postcode -->
         <div>
           <label>Postcode</label>
@@ -40,7 +50,7 @@
         <div>
           <label>Police Force</label>
           <select id="force-select" onchange="loadNeighbourhoods()">
-            <option value="">Select Force...</option>
+            <option value="">Select Force</option>
           </select>
         </div>
 
@@ -48,15 +58,20 @@
         <div>
           <label>Neighbourhood / Area</label>
           <select id="neighbourhood-select">
-            <option value="">All areas</option>
+            <option value="">All areas in force</option>
           </select>
         </div>
       </div>
-      <button onclick="loadAllData()" class="btn-primary w-full mt-4">Load Data for My Area</button>
+
+      <div class="flex gap-3 mt-4">
+        <input id="lat" value="51.5074" class="input">
+        <input id="lng" value="-0.1278" class="input">
+        <button onclick="loadAllData()" class="btn-primary">Load Data</button>
+      </div>
     </div>
 
-    <!-- Main Content -->
-    <div class="main-content">
+    <!-- Main Dashboard -->
+    <div class="dashboard">
       <!-- KPIs -->
       <div id="kpi-row" class="kpi-grid"></div>
 
@@ -64,37 +79,35 @@
       <div class="card">
         <div class="flex justify-between items-center mb-3">
           <h3>Crime Map</h3>
-          <div class="flex gap-2">
-            <div id="total-crimes" class="badge"></div>
-            <button onclick="toggleHeatmap()" class="btn text-xs">Toggle Heatmap</button>
+          <div>
+            <span id="total-crimes" class="badge"></span>
+            <button onclick="toggleHeatmap()" class="btn text-xs ml-2">Toggle Heatmap</button>
           </div>
         </div>
         <div id="map"></div>
       </div>
 
-      <!-- Charts Row -->
-      <div class="charts-grid">
-        <div class="card">
+      <!-- Charts -->
+      <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        <div class="card lg:col-span-3">
           <h3>Crime by Category</h3>
           <canvas id="category-chart"></canvas>
         </div>
-        <div class="card">
+        <div class="card lg:col-span-2">
           <h3>Top Streets</h3>
           <canvas id="streets-chart"></canvas>
         </div>
       </div>
 
-      <!-- Crime Table -->
+      <!-- Table -->
       <div class="card p-0">
         <div class="table-header">
-          <h3>Recent Crimes</h3>
+          <h3>Crime List</h3>
           <button onclick="exportCSV()" class="btn text-sm">Export CSV</button>
         </div>
         <div class="table-container">
           <table>
-            <thead>
-              <tr><th>Category</th><th>Street</th><th>Month</th></tr>
-            </thead>
+            <thead><tr><th>Category</th><th>Street</th><th>Month</th></tr></thead>
             <tbody id="crime-table"></tbody>
           </table>
         </div>
@@ -102,7 +115,6 @@
     </div>
   </div>
 
-  <!-- Scripts -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
