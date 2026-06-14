@@ -1,110 +1,1832 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>UK Police • Your Area</title>
-  <link rel="stylesheet" href="style.css">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UK Police • Your Area | Interactive Dashboard</title>
+    <meta name="description" content="Find your local UK police force and neighbourhood. Interactive dashboard replicating and improving police.uk with maps, stats, graphs, local team and more. Powered by official data.police.uk API.">
+    
+    <!-- Bootstrap 5.3 - Standardised responsive framework for mobile-first design -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons for clean icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <!-- Leaflet for interactive maps (forces map + crime map) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        /* =============================================
+           CUSTOM STYLES - Police.uk inspired + modern improvements
+           Navy/blue theme, clean cards, excellent mobile support
+           ============================================= */
+        :root {
+            --police-blue: #003087;
+            --police-dark: #0d1b2a;
+            --accent: #00a3e0;
+        }
+        
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #f8f9fa;
+        }
+        
+        .navbar-brand {
+            font-weight: 700;
+            color: var(--police-blue) !important;
+        }
+        
+        .hero {
+            background: linear-gradient(135deg, var(--police-blue) 0%, #1e3a5f 100%);
+            color: white;
+            padding: 4rem 0;
+            margin-bottom: 2rem;
+        }
+        
+        .section-title {
+            font-weight: 600;
+            color: var(--police-dark);
+            margin-bottom: 1.5rem;
+            position: relative;
+            display: inline-block;
+        }
+        
+        .section-title:after {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            left: 0;
+            width: 60px;
+            height: 3px;
+            background: var(--accent);
+            border-radius: 2px;
+        }
+        
+        .force-card, .quick-card {
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            cursor: pointer;
+            border: 1px solid #dee2e6;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        
+        .force-card:hover, .quick-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 25px rgba(0, 48, 135, 0.15);
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.25rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            border: 1px solid #e9ecef;
+            transition: transform 0.2s;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-2px);
+        }
+        
+        .big-number {
+            font-size: 2.25rem;
+            font-weight: 700;
+            line-height: 1;
+            color: var(--police-blue);
+        }
+        
+        .nav-tabs .nav-link {
+            color: #495057;
+            font-weight: 500;
+        }
+        
+        .nav-tabs .nav-link.active {
+            color: var(--police-blue);
+            border-bottom-color: var(--police-blue);
+            font-weight: 600;
+        }
+        
+        .officer-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1rem;
+            text-align: center;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+            transition: all 0.2s;
+        }
+        
+        .officer-avatar {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--police-blue), #1e3a5f);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1.5rem;
+            margin: 0 auto 0.75rem;
+            box-shadow: 0 4px 12px rgba(0, 48, 135, 0.3);
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 320px;
+        }
+        
+        .map-container {
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border: 1px solid #dee2e6;
+        }
+        
+        .police-badge {
+            background: var(--police-blue);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        
+        .data-note {
+            font-size: 0.8rem;
+            color: #6c757d;
+        }
+        
+        /* Mobile-first improvements */
+        @media (max-width: 768px) {
+            .big-number { font-size: 1.75rem; }
+            .hero { padding: 2.5rem 0; }
+            .stat-card { padding: 1rem; }
+        }
+        
+        .loading-spinner {
+            display: inline-block;
+            width: 1.25rem;
+            height: 1.25rem;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid var(--police-blue);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .tab-content {
+            padding-top: 1.5rem;
+        }
+        
+        .social-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 0.9rem;
+            border-radius: 50px;
+            font-size: 0.875rem;
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+    </style>
 </head>
 <body>
-  <div class="container">
-    <!-- Header -->
-    <header>
-      <div class="flex items-center gap-3">
-        <div class="logo">P</div>
-        <div>
-          <h1>UK Police</h1>
-          <p class="subtitle">Find your local policing area</p>
+    <!-- =============================================
+         NAVIGATION - Clean, responsive, police.uk inspired
+         Includes back to landing, dark mode toggle
+         ============================================= -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom sticky-top shadow-sm">
+        <div class="container">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="#" onclick="showLandingView(); return false;">
+                <div class="bg-primary text-white rounded d-flex align-items-center justify-content-center" style="width: 38px; height: 38px; font-weight: 800;">P</div>
+                <span class="fw-bold fs-4">police.uk</span>
+            </a>
+            
+            <div class="d-flex align-items-center gap-2">
+                <!-- Mini search visible on desktop -->
+                <div class="d-none d-md-flex">
+                    <input id="nav-postcode" type="text" class="form-control form-control-sm" placeholder="Postcode e.g. M1 1AA" style="width: 160px;">
+                    <button class="btn btn-sm btn-outline-primary ms-1" onclick="quickPostcodeSearch()">Go</button>
+                </div>
+                
+                <button class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" onclick="toggleDarkMode()">
+                    <i class="bi bi-moon-stars"></i> <span class="d-none d-lg-inline">Dark</span>
+                </button>
+                
+                <button id="back-to-landing" class="btn btn-primary btn-sm d-none" onclick="showLandingView()">
+                    <i class="bi bi-arrow-left"></i> Back to map
+                </button>
+            </div>
         </div>
-      </div>
-    </header>
+    </nav>
 
-    <!-- Find Your Area (replicates police.uk flow) -->
-    <div class="card">
-      <h2>Find your local policing area</h2>
-      <div class="area-selector">
-        <!-- Quick select -->
-        <div>
-          <label>Quick select</label>
-          <div class="quick-grid">
-            <button onclick="selectArea(51.5074, -0.1278, 'Metropolitan Police')">London</button>
-            <button onclick="selectArea(53.4808, -2.2426, 'Greater Manchester Police')">Manchester</button>
-            <button onclick="selectArea(52.4862, -1.8904, 'West Midlands Police')">Birmingham</button>
-            <button onclick="selectArea(55.9533, -3.1883, 'Police Scotland')">Edinburgh</button>
-          </div>
+    <!-- =============================================
+         LANDING VIEW - Replicates police.uk /your-area/ main page
+         Highlights, prominent search (postcode), quick pre-selected areas,
+         Interactive map of forces, full list of forces with modal selection
+         ============================================= -->
+    <div id="landing-view">
+        <!-- Hero / Highlights -->
+        <div class="hero">
+            <div class="container text-center">
+                <div class="police-badge mx-auto mb-3">OFFICIAL OPEN DATA</div>
+                <h1 class="display-5 fw-bold mb-3">Find your local policing area</h1>
+                <p class="lead mb-4 opacity-90">Search by postcode, browse forces on the map, or select from popular areas.<br>
+                Get detailed crime stats, local team info, interactive maps &amp; more.</p>
+                
+                <!-- Prominent Postcode Search (core flow #2) -->
+                <div class="row justify-content-center">
+                    <div class="col-md-8 col-lg-6">
+                        <div class="input-group input-group-lg shadow">
+                            <input type="text" id="postcode-input" class="form-control" placeholder="Enter your postcode (e.g. SW1A 1AA or M1 1AA)" aria-label="Postcode search">
+                            <button class="btn btn-light fw-semibold px-4" type="button" onclick="searchByPostcode()">
+                                <i class="bi bi-search me-2"></i>Find my area
+                            </button>
+                        </div>
+                        <small class="text-white-50 mt-2 d-block">We'll locate your exact neighbourhood using official data</small>
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <!-- Postcode -->
-        <div>
-          <label>Search by postcode</label>
-          <div class="flex gap-2">
-            <input id="postcode" type="text" placeholder="e.g. M1 1AA">
-            <button onclick="searchByPostcode()" class="btn">Search</button>
-          </div>
-        </div>
+        <div class="container">
+            <!-- Quick Pre-selected Areas (core flow #1) - Improved as nice cards -->
+            <h2 class="section-title h4">Popular areas</h2>
+            <div class="row g-3 mb-5">
+                <!-- Quick cards - each has full data for instant dashboard load -->
+                <div class="col-6 col-md-4 col-lg-3">
+                    <div class="quick-card card h-100" onclick="selectQuickArea('metropolitan-police-service', 'westminster', 51.5074, -0.1278, 'Westminster, Metropolitan Police')">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <span class="badge bg-primary">London</span>
+                                <i class="bi bi-geo-alt fs-4 text-primary"></i>
+                            </div>
+                            <h6 class="card-title mb-1 fw-semibold">Westminster</h6>
+                            <p class="card-text small text-muted mb-0">Metropolitan Police Service</p>
+                            <div class="mt-2"><span class="badge bg-light text-dark small">High profile area</span></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-4 col-lg-3">
+                    <div class="quick-card card h-100" onclick="selectQuickArea('greater-manchester-police', 'commercial-district', 53.4808, -2.2426, 'Commercial District, Greater Manchester Police')">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <span class="badge bg-success">Manchester</span>
+                                <i class="bi bi-geo-alt fs-4 text-success"></i>
+                            </div>
+                            <h6 class="card-title mb-1 fw-semibold">Commercial District</h6>
+                            <p class="card-text small text-muted mb-0">Greater Manchester Police</p>
+                            <div class="mt-2"><span class="badge bg-light text-dark small">City centre</span></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-4 col-lg-3">
+                    <div class="quick-card card h-100" onclick="selectQuickArea('west-midlands', null, 52.4862, -1.8904, 'Birmingham, West Midlands Police')">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <span class="badge bg-warning text-dark">Birmingham</span>
+                                <i class="bi bi-geo-alt fs-4 text-warning"></i>
+                            </div>
+                            <h6 class="card-title mb-1 fw-semibold">City Centre</h6>
+                            <p class="card-text small text-muted mb-0">West Midlands Police</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-4 col-lg-3">
+                    <div class="quick-card card h-100" onclick="selectQuickArea('west-yorkshire', null, 53.796, -1.549, 'Leeds, West Yorkshire Police')">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <span class="badge bg-info">Leeds</span>
+                                <i class="bi bi-geo-alt fs-4 text-info"></i>
+                            </div>
+                            <h6 class="card-title mb-1 fw-semibold">City Centre</h6>
+                            <p class="card-text small text-muted mb-0">West Yorkshire Police</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-        <!-- Force + Neighbourhood -->
-        <div>
-          <label>Police Force</label>
-          <select id="force-select" onchange="loadNeighbourhoods()">
-            <option value="">Select force...</option>
-          </select>
-        </div>
-        <div>
-          <label>Neighbourhood / Area</label>
-          <select id="neighbourhood-select">
-            <option value="">All areas</option>
-          </select>
-        </div>
-      </div>
+            <!-- Interactive Map of Forces (core flow - map of all forces) -->
+            <div class="mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h2 class="section-title h4 mb-0">Explore all police forces</h2>
+                    <small class="text-muted">Click a marker to select a force</small>
+                </div>
+                <div id="forces-map" class="map-container" style="height: 420px; width: 100%;"></div>
+                <p class="data-note mt-2">Map shows approximate headquarters locations for major forces. Click marker → select neighbourhood.</p>
+            </div>
 
-      <button onclick="loadAreaDashboard()" class="btn-primary mt-4 w-full">Show Area Dashboard</button>
+            <!-- Manual Force + Neighbourhood Selection + Full List -->
+            <div class="row g-4">
+                <div class="col-lg-5">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-body">
+                            <h5 class="card-title mb-3"><i class="bi bi-list-ul me-2"></i>Manual selection</h5>
+                            
+                            <div class="mb-3">
+                                <label class="form-label small fw-semibold text-muted">1. Police Force</label>
+                                <select id="force-select" class="form-select" onchange="loadNeighbourhoods()">
+                                    <option value="">Select a police force...</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label small fw-semibold text-muted">2. Neighbourhood / Area</label>
+                                <select id="neighbourhood-select" class="form-select">
+                                    <option value="">All / Select neighbourhood...</option>
+                                </select>
+                            </div>
+                            
+                            <button onclick="loadFromDropdown()" class="btn btn-primary w-100 py-2 fw-semibold">
+                                <i class="bi bi-arrow-right-circle me-2"></i>Show Area Dashboard
+                            </button>
+                            <small class="text-muted d-block mt-2">Uses official data.police.uk neighbourhoods</small>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-lg-7">
+                    <h5 class="mb-3"><i class="bi bi-grid-3x3-gap me-2"></i>All forces (click for details)</h5>
+                    <div id="forces-grid" class="row g-2" style="max-height: 380px; overflow-y: auto;">
+                        <!-- Populated dynamically by JS with all 43 forces as cards -->
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <!-- Area Dashboard (appears after selection) -->
-    <div id="dashboard" class="hidden">
-      <div class="area-header">
-        <div>
-          <h2 id="area-name">Your Local Area</h2>
-          <p id="area-force" class="text-slate-500"></p>
-        </div>
-        <div id="area-contact"></div>
-      </div>
+    <!-- =============================================
+         DASHBOARD VIEW - Replicates specific area page e.g. greater-manchester-police/commercial-district/
+         Header with socials + contact, stats highlights, tabbed content
+         Tabs: Overview | Crime Map | Statistics (graphs + comparison) | Local Team | Contact
+         ============================================= -->
+    <div id="dashboard-view" class="d-none py-4">
+        <div class="container">
+            <!-- Area Header -->
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
+                <div>
+                    <button class="btn btn-outline-secondary btn-sm mb-2 d-md-none" onclick="showLandingView()">
+                        <i class="bi bi-arrow-left"></i> Back
+                    </button>
+                    <h1 id="dash-area-name" class="h3 fw-bold mb-1">Area Name</h1>
+                    <p id="dash-force-name" class="text-muted mb-0 fs-5"></p>
+                    <div id="dash-meta" class="d-flex gap-2 mt-1 flex-wrap"></div>
+                </div>
+                
+                <div class="d-flex flex-wrap gap-2 align-items-center">
+                    <!-- Dynamic Social Links populated from force engagement_methods -->
+                    <div id="social-links" class="d-flex flex-wrap gap-2"></div>
+                    
+                    <button class="btn btn-outline-primary btn-sm" onclick="showComparisonModal()">
+                        <i class="bi bi-bar-chart-steps me-1"></i> Compare areas
+                    </button>
+                    
+                    <button class="btn btn-primary btn-sm" onclick="refreshCurrentData()">
+                        <i class="bi bi-arrow-clockwise me-1"></i> Refresh data
+                    </button>
+                </div>
+            </div>
 
-      <!-- Stats + Graphs -->
-      <div class="stats-grid">
-        <div class="stat-card">
-          <div class="label">Total Crimes (last month)</div>
-          <div id="total-crimes" class="big-number">—</div>
-        </div>
-        <div class="stat-card">
-          <div class="label">Top Crime Type</div>
-          <div id="top-crime" class="big-number">—</div>
-        </div>
-      </div>
+            <!-- Key Highlights / Stats Row (improved with more metrics) -->
+            <div class="row g-3 mb-4" id="stats-row">
+                <!-- JS populates 4 stat cards here: Total crimes, Top crime, Team size, % change -->
+            </div>
 
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div class="card">
-          <h3>Crime by Category</h3>
-          <canvas id="category-chart"></canvas>
-        </div>
-        <div class="card">
-          <h3>Recent Crime Map</h3>
-          <div id="map" style="height: 380px; border-radius: 12px;"></div>
-        </div>
-      </div>
+            <!-- TABBED CONTENT - Matches police.uk structure closely -->
+            <ul class="nav nav-tabs nav-fill mb-3" id="areaTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="overview-tab-btn" data-bs-toggle="tab" data-bs-target="#overview-tab" type="button" role="tab">
+                        <i class="bi bi-info-circle me-1"></i> Overview
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="crime-map-tab-btn" data-bs-toggle="tab" data-bs-target="#crime-map-tab" type="button" role="tab">
+                        <i class="bi bi-map me-1"></i> Crime Map
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="stats-tab-btn" data-bs-toggle="tab" data-bs-target="#stats-tab" type="button" role="tab">
+                        <i class="bi bi-graph-up me-1"></i> Statistics
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="team-tab-btn" data-bs-toggle="tab" data-bs-target="#team-tab" type="button" role="tab">
+                        <i class="bi bi-people me-1"></i> Your Local Team
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="contact-tab-btn" data-bs-toggle="tab" data-bs-target="#contact-tab" type="button" role="tab">
+                        <i class="bi bi-envelope me-1"></i> Contact
+                    </button>
+                </li>
+            </ul>
 
-      <!-- Extra sections -->
-      <div class="card">
-        <h3>Stop &amp; Search (last month)</h3>
-        <div id="stop-search-summary"></div>
-      </div>
+            <div class="tab-content" id="areaTabContent">
+                <!-- OVERVIEW TAB -->
+                <div class="tab-pane fade show active" id="overview-tab" role="tabpanel">
+                    <div class="row g-4">
+                        <div class="col-lg-7">
+                            <div class="card h-100">
+                                <div class="card-header bg-white"><strong>About this area</strong></div>
+                                <div class="card-body">
+                                    <p id="area-description" class="mb-3">Loading description...</p>
+                                    <div id="priorities-list"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-5">
+                            <div class="card h-100">
+                                <div class="card-header bg-white"><strong>Quick facts</strong></div>
+                                <div class="card-body" id="quick-facts">
+                                    <!-- Populated with population, last updated etc -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CRIME MAP TAB -->
+                <div class="tab-pane fade" id="crime-map-tab" role="tabpanel">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center bg-white">
+                            <strong>Street-level crimes (last available month)</strong>
+                            <div>
+                                <select id="crime-category-filter" class="form-select form-select-sm d-inline-block w-auto" onchange="filterCrimeMarkers()">
+                                    <option value="">All categories</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="card-body p-0">
+                            <div id="crime-map" class="map-container" style="height: 520px;"></div>
+                        </div>
+                        <div class="card-footer small text-muted">
+                            Data from data.police.uk • Locations are approximate street-level • Drag to explore
+                        </div>
+                    </div>
+                </div>
+
+                <!-- STATISTICS TAB with multiple graphs + table -->
+                <div class="tab-pane fade" id="stats-tab" role="tabpanel">
+                    <div class="row g-4">
+                        <!-- Category breakdown -->
+                        <div class="col-lg-6">
+                            <div class="card h-100">
+                                <div class="card-header bg-white"><strong>Crimes by category</strong></div>
+                                <div class="card-body">
+                                    <div class="chart-container"><canvas id="category-chart"></canvas></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Trend over time -->
+                        <div class="col-lg-6">
+                            <div class="card h-100">
+                                <div class="card-header bg-white"><strong>Monthly crime trend (last 6 months)</strong></div>
+                                <div class="card-body">
+                                    <div class="chart-container"><canvas id="trend-chart"></canvas></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Stop & Search summary -->
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header bg-white d-flex justify-content-between">
+                                    <strong>Stop &amp; Search (last month)</strong>
+                                    <span id="stop-search-count" class="badge bg-secondary"></span>
+                                </div>
+                                <div class="card-body" id="stop-search-body">
+                                    <!-- Summary or small chart populated by JS -->
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Recent crimes table -->
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                                    <strong>Recent crimes (sample)</strong>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="exportCrimesCSV()">
+                                        <i class="bi bi-download me-1"></i> Export CSV
+                                    </button>
+                                </div>
+                                <div class="card-body p-0">
+                                    <div class="table-responsive">
+                                        <table class="table table-hover mb-0 small" id="crimes-table">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>Date</th>
+                                                    <th>Category</th>
+                                                    <th>Location</th>
+                                                    <th>Outcome</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- LOCAL TEAM TAB -->
+                <div class="tab-pane fade" id="team-tab" role="tabpanel">
+                    <div class="alert alert-light small mb-3">
+                        <i class="bi bi-info-circle me-1"></i> 
+                        Data from official neighbourhood policing teams where available. Contact details via force website.
+                    </div>
+                    <div id="team-grid" class="row g-3">
+                        <!-- Officer cards populated dynamically -->
+                    </div>
+                </div>
+
+                <!-- CONTACT TAB -->
+                <div class="tab-pane fade" id="contact-tab" role="tabpanel">
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <div class="card h-100">
+                                <div class="card-header bg-white"><strong>Get in touch</strong></div>
+                                <div class="card-body" id="contact-info">
+                                    <!-- Phone, website, address populated -->
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card h-100">
+                                <div class="card-header bg-white"><strong>Report a crime or concern</strong></div>
+                                <div class="card-body">
+                                    <p class="small">For emergencies always call <strong>999</strong>. For non-emergency crime or anti-social behaviour:</p>
+                                    <a href="https://www.police.uk/pu/contact-us/" target="_blank" class="btn btn-primary w-100 mb-2">Report online via police.uk</a>
+                                    <p class="small text-muted">Or visit your force website for local reporting options and station finder.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
-  </div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="script.js"></script>
+    <!-- Comparison Modal -->
+    <div class="modal fade" id="comparisonModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-bar-chart-steps me-2"></i>Compare two areas</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <label class="form-label small">Area 1 (current)</label>
+                            <input type="text" id="compare-area1" class="form-control" readonly>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small">Area 2 (select another)</label>
+                            <select id="compare-force2" class="form-select mb-2" onchange="loadCompareNeighbourhoods()">
+                                <option value="">Select force...</option>
+                            </select>
+                            <select id="compare-neigh2" class="form-select">
+                                <option value="">Select neighbourhood...</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div id="comparison-results" class="d-none">
+                        <h6 class="mb-3">Side-by-side comparison</h6>
+                        <div class="row g-3 mb-4" id="compare-stats-row"></div>
+                        
+                        <div class="card">
+                            <div class="card-header">Crime categories comparison</div>
+                            <div class="card-body">
+                                <div class="chart-container" style="height: 280px;"><canvas id="compare-chart"></canvas></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div id="comparison-loading" class="text-center py-4 d-none">
+                        <div class="loading-spinner"></div>
+                        <p class="mt-2 small">Fetching data for comparison...</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" onclick="runComparison()">Compare</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast container for notifications -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 9999;"></div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    
+    <script>
+        // =============================================
+        // GLOBAL STATE & CONFIG
+        // =============================================
+        let currentForceId = null;
+        let currentNeighId = null;
+        let currentLat = 51.5074;
+        let currentLng = -0.1278;
+        let currentAreaName = '';
+        let currentCrimes = [];
+        let crimeMap = null;           // Leaflet map in dashboard crime tab
+        let forcesMap = null;          // Leaflet map on landing
+        let categoryChart = null;
+        let trendChart = null;
+        let compareChart = null;
+        let crimeMarkers = [];         // For filtering on crime map
+        let currentForceData = null;   // Cache force details (socials etc)
+
+        // Predefined force centers for reliable map centering and dropdown fallback
+        const FORCE_CENTERS = {
+            'metropolitan-police-service': { lat: 51.5074, lng: -0.1278 },
+            'greater-manchester-police': { lat: 53.4808, lng: -2.2426 },
+            'west-midlands': { lat: 52.4862, lng: -1.8904 },
+            'west-yorkshire': { lat: 53.796, lng: -1.549 },
+            'avon-and-somerset': { lat: 51.455, lng: -2.583 },
+            'city-of-london': { lat: 51.515, lng: -0.092 },
+            'hampshire': { lat: 50.902, lng: -1.404 },
+            'thames-valley': { lat: 51.45, lng: -0.97 },
+            'essex': { lat: 51.736, lng: 0.48 },
+            'kent': { lat: 51.28, lng: 0.52 },
+            'devon-and-cornwall': { lat: 50.37, lng: -4.14 },
+            'south-yorkshire': { lat: 53.38, lng: -1.47 }
+            // Add more as needed - covers major ones for demo
+        };
+
+        // Quick areas with specific neighbourhood examples (for realistic demo)
+        const QUICK_AREAS = {
+            'metropolitan-police-service': { neigh: 'westminster', name: 'Westminster, Metropolitan Police' },
+            'greater-manchester-police': { neigh: 'commercial-district', name: 'Commercial District, Greater Manchester Police' }
+        };
+
+        // =============================================
+        // UTILITY FUNCTIONS
+        // =============================================
+        
+        function showToast(message, type = 'success') {
+            const toastContainer = document.querySelector('.toast-container');
+            const toastEl = document.createElement('div');
+            toastEl.className = `toast align-items-center text-white bg-${type === 'success' ? 'success' : type === 'danger' ? 'danger' : 'primary'} border-0`;
+            toastEl.setAttribute('role', 'alert');
+            toastEl.innerHTML = `
+                <div class="d-flex">
+                    <div class="toast-body">${message}</div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                </div>
+            `;
+            toastContainer.appendChild(toastEl);
+            const toast = new bootstrap.Toast(toastEl, { delay: 4000 });
+            toast.show();
+            toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove());
+        }
+
+        function toggleDarkMode() {
+            const html = document.documentElement;
+            if (html.getAttribute('data-bs-theme') === 'dark') {
+                html.setAttribute('data-bs-theme', 'light');
+                document.body.style.backgroundColor = '#f8f9fa';
+            } else {
+                html.setAttribute('data-bs-theme', 'dark');
+                document.body.style.backgroundColor = '#0f172a';
+            }
+        }
+
+        function showLoading(elementId, show = true) {
+            const el = document.getElementById(elementId);
+            if (!el) return;
+            if (show) {
+                el.innerHTML = `<div class="text-center py-4"><div class="loading-spinner"></div><p class="mt-2 small text-muted">Loading data...</p></div>`;
+            }
+        }
+
+        // =============================================
+        // LANDING PAGE INITIALIZATION
+        // =============================================
+        
+        async function initLanding() {
+            // 1. Load all forces into dropdown + grid
+            await loadAllForces();
+            
+            // 2. Initialize interactive forces map with markers
+            initForcesMap();
+            
+            // 3. Pre-populate some quick data if needed
+            // (quick cards already have onclick handlers)
+            
+            // Show welcome toast on first load (optional)
+            // setTimeout(() => showToast('Welcome! Try postcode search or click a force on the map.'), 1200);
+        }
+
+        async function loadAllForces() {
+            try {
+                const res = await fetch('https://data.police.uk/api/forces');
+                if (!res.ok) throw new Error('Failed to load forces');
+                const forces = await res.json();
+                
+                // Populate main dropdown
+                const select = document.getElementById('force-select');
+                select.innerHTML = '<option value="">Select a police force...</option>';
+                forces.forEach(force => {
+                    const opt = document.createElement('option');
+                    opt.value = force.id;
+                    opt.textContent = force.name;
+                    select.appendChild(opt);
+                });
+                
+                // Populate grid of all forces (clickable cards)
+                const grid = document.getElementById('forces-grid');
+                grid.innerHTML = '';
+                
+                forces.forEach(force => {
+                    const col = document.createElement('div');
+                    col.className = 'col-6 col-md-4 col-xl-3';
+                    col.innerHTML = `
+                        <div class="force-card card h-100 p-3" onclick="selectForceFromGrid('${force.id}', '${force.name.replace(/'/g, "\\'")}')">
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="flex-shrink-0">
+                                    <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center" style="width:36px;height:36px;">
+                                        <i class="bi bi-shield-check fs-5"></i>
+                                    </div>
+                                </div>
+                                <div class="flex-grow-1 min-w-0">
+                                    <div class="fw-semibold small text-truncate">${force.name}</div>
+                                    <div class="text-muted" style="font-size:0.7rem;">Click for neighbourhoods</div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    grid.appendChild(col);
+                });
+                
+            } catch (err) {
+                console.error(err);
+                showToast('Could not load police forces list. Please refresh.', 'danger');
+            }
+        }
+
+        function initForcesMap() {
+            if (forcesMap) forcesMap.remove();
+            
+            forcesMap = L.map('forces-map').setView([54.5, -2.0], 5.5); // UK center
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 18
+            }).addTo(forcesMap);
+            
+            // Add markers for major forces from FORCE_CENTERS
+            Object.keys(FORCE_CENTERS).forEach(forceId => {
+                const center = FORCE_CENTERS[forceId];
+                const marker = L.marker([center.lat, center.lng]).addTo(forcesMap);
+                
+                const popupContent = `
+                    <div style="min-width:180px">
+                        <strong>${forceId.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</strong><br>
+                        <button class="btn btn-sm btn-primary mt-2 w-100" onclick="selectForceFromMap('${forceId}')">
+                            Select this force →
+                        </button>
+                    </div>
+                `;
+                marker.bindPopup(popupContent);
+            });
+            
+            // Optional: Add a note layer or control
+        }
+
+        async function selectForceFromMap(forceId) {
+            // Close popup if open
+            if (forcesMap) forcesMap.closePopup();
+            
+            // Load neighbourhoods and show modal for selection
+            await showForceModal(forceId);
+        }
+
+        async function selectForceFromGrid(forceId, forceName) {
+            await showForceModal(forceId, forceName);
+        }
+
+        async function showForceModal(forceId, forceName = null) {
+            // Create or reuse modal for force + neigh selection
+            let modal = document.getElementById('force-modal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'force-modal';
+                modal.className = 'modal fade';
+                modal.innerHTML = `
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="force-modal-title"></h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div id="force-modal-desc" class="small text-muted mb-3"></div>
+                                
+                                <label class="form-label small fw-semibold">Choose neighbourhood / area</label>
+                                <select id="modal-neigh-select" class="form-select mb-3"></select>
+                                
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-primary" id="modal-go-btn">Go to this area dashboard</button>
+                                    <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+            }
+            
+            const titleEl = document.getElementById('force-modal-title');
+            const descEl = document.getElementById('force-modal-desc');
+            const neighSelect = document.getElementById('modal-neigh-select');
+            const goBtn = document.getElementById('modal-go-btn');
+            
+            titleEl.textContent = forceName || forceId.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            
+            // Fetch force details for description + socials preview
+            try {
+                const forceRes = await fetch(`https://data.police.uk/api/forces/${forceId}`);
+                if (forceRes.ok) {
+                    const fData = await forceRes.json();
+                    descEl.innerHTML = fData.description ? fData.description.substring(0, 220) + '...' : 'Official police force data.';
+                    currentForceData = fData; // cache
+                } else {
+                    descEl.textContent = 'Official UK territorial police force.';
+                }
+            } catch (e) {
+                descEl.textContent = 'Official UK territorial police force.';
+            }
+            
+            // Load neighbourhoods
+            neighSelect.innerHTML = '<option value="">Loading neighbourhoods...</option>';
+            goBtn.disabled = true;
+            
+            try {
+                const neighRes = await fetch(`https://data.police.uk/api/${forceId}/neighbourhoods`);
+                const neighs = await neighRes.json();
+                
+                neighSelect.innerHTML = '<option value="">Select a neighbourhood...</option>';
+                neighs.forEach(n => {
+                    const opt = document.createElement('option');
+                    opt.value = n.id;
+                    opt.textContent = n.name;
+                    neighSelect.appendChild(opt);
+                });
+                
+                goBtn.disabled = false;
+                
+                goBtn.onclick = () => {
+                    const selectedNeigh = neighSelect.value;
+                    const bsModal = bootstrap.Modal.getInstance(modal) || new bootstrap.Modal(modal);
+                    bsModal.hide();
+                    
+                    const center = FORCE_CENTERS[forceId] || { lat: 52.5, lng: -1.5 };
+                    const displayName = selectedNeigh 
+                        ? `${neighSelect.options[neighSelect.selectedIndex].text}, ${titleEl.textContent}`
+                        : titleEl.textContent;
+                    
+                    loadAreaDashboard(forceId, selectedNeigh || null, center.lat, center.lng, displayName);
+                };
+                
+            } catch (err) {
+                neighSelect.innerHTML = '<option value="">Could not load neighbourhoods</option>';
+                showToast('Neighbourhood data temporarily unavailable', 'danger');
+            }
+            
+            const bsModal = new bootstrap.Modal(modal);
+            bsModal.show();
+        }
+
+        // =============================================
+        // SELECTION & DASHBOARD LOADING (Core flows)
+        // =============================================
+        
+        async function searchByPostcode() {
+            const pcInput = document.getElementById('postcode-input') || document.getElementById('nav-postcode');
+            const pc = pcInput.value.trim().toUpperCase().replace(/\s/g, '');
+            if (!pc) {
+                showToast('Please enter a postcode', 'danger');
+                return;
+            }
+            
+            try {
+                // Step 1: Get lat/lng from postcodes.io (reliable UK postcode API)
+                const pcRes = await fetch(`https://api.postcodes.io/postcodes/${pc}`);
+                const pcJson = await pcRes.json();
+                
+                if (pcJson.status !== 200 || !pcJson.result) {
+                    throw new Error('Invalid postcode');
+                }
+                
+                const { latitude: lat, longitude: lng } = pcJson.result;
+                
+                // Step 2: Use police API to locate exact neighbourhood & force
+                const locateRes = await fetch(`https://data.police.uk/api/neighbourhood-locate?lat=${lat}&lng=${lng}`);
+                
+                if (!locateRes.ok) {
+                    // Fallback: just use lat/lng for crimes map, generic name
+                    showToast('Exact neighbourhood not found — showing nearby crimes', 'warning');
+                    loadAreaDashboard(null, null, lat, lng, `Postcode ${pc}`);
+                    return;
+                }
+                
+                const locateData = await locateRes.json();
+                // locateData typically: { force: { id, name }, neighbourhood: { id, name } }
+                
+                if (locateData.force && locateData.neighbourhood) {
+                    const display = `${locateData.neighbourhood.name}, ${locateData.force.name}`;
+                    loadAreaDashboard(locateData.force.id, locateData.neighbourhood.id, lat, lng, display);
+                } else {
+                    loadAreaDashboard(null, null, lat, lng, `Area near ${pc}`);
+                }
+                
+            } catch (err) {
+                console.error(err);
+                showToast('Postcode lookup failed. Try a different postcode or use manual selection.', 'danger');
+            }
+        }
+
+        function quickPostcodeSearch() {
+            // Used by nav bar mini search
+            const input = document.getElementById('nav-postcode');
+            if (input && input.value) {
+                document.getElementById('postcode-input').value = input.value;
+                searchByPostcode();
+            }
+        }
+
+        // Quick select cards handler
+        function selectQuickArea(forceId, neighId, lat, lng, displayName) {
+            loadAreaDashboard(forceId, neighId, lat, lng, displayName);
+        }
+
+        async function loadFromDropdown() {
+            const forceId = document.getElementById('force-select').value;
+            const neighId = document.getElementById('neighbourhood-select').value;
+            
+            if (!forceId) {
+                showToast('Please select a police force first', 'danger');
+                return;
+            }
+            
+            const center = FORCE_CENTERS[forceId] || { lat: 52.5, lng: -1.5 };
+            let displayName = document.getElementById('force-select').options[document.getElementById('force-select').selectedIndex].text;
+            
+            if (neighId) {
+                const neighName = document.getElementById('neighbourhood-select').options[document.getElementById('neighbourhood-select').selectedIndex].text;
+                displayName = `${neighName}, ${displayName}`;
+            }
+            
+            loadAreaDashboard(forceId, neighId || null, center.lat, center.lng, displayName);
+        }
+
+        async function loadNeighbourhoods() {
+            const forceId = document.getElementById('force-select').value;
+            const neighSelect = document.getElementById('neighbourhood-select');
+            neighSelect.innerHTML = '<option value="">All / Select neighbourhood...</option>';
+            
+            if (!forceId) return;
+            
+            try {
+                const res = await fetch(`https://data.police.uk/api/${forceId}/neighbourhoods`);
+                const data = await res.json();
+                data.forEach(n => {
+                    const opt = document.createElement('option');
+                    opt.value = n.id;
+                    opt.textContent = n.name;
+                    neighSelect.appendChild(opt);
+                });
+            } catch (e) {
+                showToast('Failed to load neighbourhoods for this force', 'danger');
+            }
+        }
+
+        // =============================================
+        // MAIN DASHBOARD LOADER - Heart of the app
+        // Fetches force info, neigh details, team, crimes, stops etc.
+        // Builds all tabs, charts, maps
+        // =============================================
+        async function loadAreaDashboard(forceId, neighId, lat, lng, displayName) {
+            // Show dashboard, hide landing
+            document.getElementById('landing-view').classList.add('d-none');
+            document.getElementById('dashboard-view').classList.remove('d-none');
+            document.getElementById('back-to-landing').classList.remove('d-none');
+            
+            // Set state
+            currentForceId = forceId;
+            currentNeighId = neighId;
+            currentLat = lat;
+            currentLng = lng;
+            currentAreaName = displayName;
+            
+            // Update header
+            document.getElementById('dash-area-name').textContent = displayName || 'Your Local Area';
+            document.getElementById('dash-force-name').textContent = forceId ? forceId.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Custom area';
+            
+            // Clear previous
+            document.getElementById('stats-row').innerHTML = '';
+            document.getElementById('social-links').innerHTML = '';
+            if (categoryChart) { categoryChart.destroy(); categoryChart = null; }
+            if (trendChart) { trendChart.destroy(); trendChart = null; }
+            
+            // Show loading state on stats
+            document.getElementById('stats-row').innerHTML = `
+                <div class="col-6 col-md-3"><div class="stat-card text-center"><div class="loading-spinner mx-auto"></div></div></div>
+                <div class="col-6 col-md-3"><div class="stat-card text-center"><div class="loading-spinner mx-auto"></div></div></div>
+                <div class="col-6 col-md-3"><div class="stat-card text-center"><div class="loading-spinner mx-auto"></div></div></div>
+                <div class="col-6 col-md-3"><div class="stat-card text-center"><div class="loading-spinner mx-auto"></div></div></div>
+            `;
+            
+            // 1. Fetch force details (for socials, contact, description)
+            if (forceId) {
+                try {
+                    const fRes = await fetch(`https://data.police.uk/api/forces/${forceId}`);
+                    if (fRes.ok) {
+                        currentForceData = await fRes.json();
+                        renderSocialAndContact(currentForceData);
+                    }
+                } catch (e) { console.warn('Force details fetch failed', e); }
+            }
+            
+            // 2. Fetch neighbourhood specific info if available
+            let neighData = null;
+            if (forceId && neighId) {
+                try {
+                    const nRes = await fetch(`https://data.police.uk/api/${forceId}/${neighId}`);
+                    if (nRes.ok) neighData = await nRes.json();
+                } catch (e) { /* optional */ }
+            }
+            
+            // 3. Load key stats + crimes (main data)
+            await loadCrimeDataAndStats(lat, lng);
+            
+            // 4. Load local team if force + neigh
+            if (forceId && neighId) {
+                await loadLocalTeam(forceId, neighId);
+            } else {
+                document.getElementById('team-grid').innerHTML = '<div class="col-12"><div class="alert alert-light">Local team data is available when a specific neighbourhood is selected.</div></div>';
+            }
+            
+            // 5. Populate overview tab
+            populateOverviewTab(neighData, currentForceData);
+            
+            // 6. Initialize crime map (will be shown when tab activated)
+            // We init it here but it will be visible on tab switch
+            setTimeout(() => {
+                if (!crimeMap) initCrimeMap();
+            }, 300);
+            
+            // 7. Preload some stats data for Statistics tab (category + trend)
+            // Charts are built when Statistics tab is shown (see event listener below)
+            
+            // Show success
+            showToast(`Loaded data for ${displayName}`, 'success');
+            
+            // Switch to Overview tab by default
+            const overviewBtn = document.getElementById('overview-tab-btn');
+            if (overviewBtn) overviewBtn.click();
+        }
+
+        async function loadCrimeDataAndStats(lat, lng) {
+            try {
+                // Get last updated date for best month
+                let dateStr = '2025-04'; // fallback recent month
+                try {
+                    const lastRes = await fetch('https://data.police.uk/api/crime-last-updated');
+                    const lastData = await lastRes.json();
+                    if (lastData.date) dateStr = lastData.date.substring(0, 7);
+                } catch (_) {}
+                
+                // Fetch crimes near location
+                const crimesUrl = `https://data.police.uk/api/crimes-street/all-crime?lat=${lat}&lng=${lng}&date=${dateStr}`;
+                const crimesRes = await fetch(crimesUrl);
+                currentCrimes = await crimesRes.json();
+                
+                if (!Array.isArray(currentCrimes)) currentCrimes = [];
+                
+                // Calculate stats
+                const total = currentCrimes.length;
+                const counts = {};
+                currentCrimes.forEach(c => {
+                    counts[c.category] = (counts[c.category] || 0) + 1;
+                });
+                
+                const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+                const topCrime = sorted.length > 0 ? sorted[0][0].replace(/-/g, ' ') : '—';
+                
+                // Simple previous month comparison (demo - one month back)
+                let changePct = null;
+                try {
+                    const prevDate = new Date(dateStr + '-01');
+                    prevDate.setMonth(prevDate.getMonth() - 1);
+                    const prevStr = prevDate.toISOString().substring(0, 7);
+                    const prevRes = await fetch(`https://data.police.uk/api/crimes-street/all-crime?lat=${lat}&lng=${lng}&date=${prevStr}`);
+                    const prevCrimes = await prevRes.json();
+                    if (Array.isArray(prevCrimes) && prevCrimes.length > 0) {
+                        const pct = ((total - prevCrimes.length) / prevCrimes.length * 100);
+                        changePct = Math.round(pct);
+                    }
+                } catch (_) {}
+                
+                // Render stats cards
+                renderStatsCards(total, topCrime, changePct);
+                
+                // Also populate category filter for crime map
+                populateCategoryFilter(counts);
+                
+            } catch (err) {
+                console.error('Crime data error:', err);
+                document.getElementById('stats-row').innerHTML = '<div class="col-12"><div class="alert alert-warning">Crime data temporarily unavailable for this location.</div></div>';
+            }
+        }
+
+        function renderStatsCards(total, topCrime, changePct) {
+            const container = document.getElementById('stats-row');
+            container.innerHTML = `
+                <div class="col-6 col-md-3">
+                    <div class="stat-card text-center h-100">
+                        <div class="text-muted small">Total crimes (last month)</div>
+                        <div class="big-number">${total}</div>
+                        <div class="small text-muted">Street-level incidents</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="stat-card text-center h-100">
+                        <div class="text-muted small">Top crime type</div>
+                        <div class="big-number fs-5 mt-2 text-wrap" style="line-height:1.1">${topCrime}</div>
+                        <div class="small text-muted mt-1">Most reported category</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="stat-card text-center h-100">
+                        <div class="text-muted small">Change vs previous month</div>
+                        <div class="big-number ${changePct !== null ? (changePct >= 0 ? 'text-success' : 'text-danger') : ''}">
+                            ${changePct !== null ? (changePct >= 0 ? '+' : '') + changePct + '%' : '—'}
+                        </div>
+                        <div class="small text-muted">Based on available data</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="stat-card text-center h-100 d-flex flex-column justify-content-center">
+                        <div class="text-muted small mb-1">Data source</div>
+                        <div><span class="badge bg-primary">data.police.uk</span></div>
+                        <div class="small mt-2 text-muted">Updated monthly</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function populateCategoryFilter(counts) {
+            const filter = document.getElementById('crime-category-filter');
+            if (!filter) return;
+            filter.innerHTML = '<option value="">All categories</option>';
+            Object.keys(counts).sort().forEach(cat => {
+                const opt = document.createElement('option');
+                opt.value = cat;
+                opt.textContent = cat.replace(/-/g, ' ') + ` (${counts[cat]})`;
+                filter.appendChild(opt);
+            });
+        }
+
+        function renderSocialAndContact(forceData) {
+            const socialContainer = document.getElementById('social-links');
+            socialContainer.innerHTML = '';
+            
+            if (!forceData || !forceData.engagement_methods) return;
+            
+            forceData.engagement_methods.forEach(method => {
+                if (!method.url) return;
+                let icon = 'bi-link-45deg';
+                const title = (method.title || '').toLowerCase();
+                if (title.includes('twitter') || title.includes('x.com')) icon = 'bi-twitter-x';
+                else if (title.includes('facebook')) icon = 'bi-facebook';
+                else if (title.includes('youtube')) icon = 'bi-youtube';
+                else if (title.includes('instagram')) icon = 'bi-instagram';
+                
+                const a = document.createElement('a');
+                a.href = method.url;
+                a.target = '_blank';
+                a.className = `social-btn btn btn-sm btn-outline-primary`;
+                a.innerHTML = `<i class="bi ${icon}"></i> <span class="d-none d-md-inline">${method.title || 'Link'}</span>`;
+                socialContainer.appendChild(a);
+            });
+            
+            // Add force website if present
+            if (forceData.url) {
+                const web = document.createElement('a');
+                web.href = forceData.url;
+                web.target = '_blank';
+                web.className = 'social-btn btn btn-sm btn-outline-secondary';
+                web.innerHTML = `<i class="bi bi-globe"></i> <span class="d-none d-md-inline">Force site</span>`;
+                socialContainer.appendChild(web);
+            }
+        }
+
+        async function loadLocalTeam(forceId, neighId) {
+            const grid = document.getElementById('team-grid');
+            grid.innerHTML = `<div class="col-12 text-center py-3"><div class="loading-spinner mx-auto"></div></div>`;
+            
+            try {
+                const res = await fetch(`https://data.police.uk/api/${forceId}/${neighId}/team`);
+                if (!res.ok) throw new Error('No team data');
+                const team = await res.json();
+                
+                grid.innerHTML = '';
+                
+                if (!team || team.length === 0) {
+                    grid.innerHTML = '<div class="col-12"><div class="alert alert-light">No detailed team members published for this neighbourhood yet.</div></div>';
+                    return;
+                }
+                
+                team.forEach(member => {
+                    const initials = (member.name || 'Officer').split(' ').map(n => n[0]).join('').substring(0,2).toUpperCase();
+                    const col = document.createElement('div');
+                    col.className = 'col-6 col-md-4 col-lg-3';
+                    col.innerHTML = `
+                        <div class="officer-card h-100">
+                            <div class="officer-avatar">${initials}</div>
+                            <h6 class="mb-1 fw-semibold">${member.name || 'Team Member'}</h6>
+                            <div class="text-primary small fw-medium">${member.rank || member.neighbourhood_role || 'Police Officer'}</div>
+                            ${member.bio ? `<p class="small text-muted mt-2 mb-0">${member.bio.substring(0,80)}...</p>` : ''}
+                            <button class="btn btn-sm btn-outline-primary mt-2 w-100" onclick="showOfficerModal('${(member.name || 'Officer').replace(/'/g, "\\'")}', '${(member.rank || '').replace(/'/g, "\\'")}')">
+                                View profile
+                            </button>
+                        </div>
+                    `;
+                    grid.appendChild(col);
+                });
+                
+            } catch (err) {
+                grid.innerHTML = '<div class="col-12"><div class="alert alert-light">Local policing team information is not available via the open API for every area. Check the force website for the latest team details.</div></div>';
+            }
+        }
+
+        function showOfficerModal(name, rank) {
+            const modalHtml = `
+                <div class="modal fade" id="officer-modal" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">${name}</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p><strong>Role:</strong> ${rank || 'Neighbourhood Policing Team'}</p>
+                                <p class="small">This is illustrative data from the UK Police open API. For official contact or current team members, please visit your local police force website or use the 101 non-emergency number.</p>
+                                <div class="alert alert-info small mb-0">In a real deployment this modal could show bio, photo, specific contact form or calendar of events.</div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            const modalEl = document.getElementById('officer-modal');
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+            modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove());
+        }
+
+        function populateOverviewTab(neighData, forceData) {
+            // Description
+            const descEl = document.getElementById('area-description');
+            if (neighData && neighData.description) {
+                descEl.textContent = neighData.description;
+            } else if (forceData && forceData.description) {
+                descEl.textContent = forceData.description;
+            } else {
+                descEl.textContent = 'This is your local policing area. Data is sourced from the official UK Police open data portal.';
+            }
+            
+            // Quick facts
+            const factsEl = document.getElementById('quick-facts');
+            let html = '<ul class="list-unstyled mb-0 small">';
+            if (neighData && neighData.population) html += `<li><strong>Population:</strong> ~${neighData.population.toLocaleString()}</li>`;
+            html += `<li><strong>Last data update:</strong> ${new Date().toLocaleDateString('en-GB', {month:'long', year:'numeric'})}</li>`;
+            html += `<li><strong>Source:</strong> data.police.uk (Home Office)</li>`;
+            html += '</ul>';
+            factsEl.innerHTML = html;
+            
+            // Priorities (if endpoint works)
+            const prioEl = document.getElementById('priorities-list');
+            prioEl.innerHTML = '<div class="small text-muted">Priorities data available on force website for many areas.</div>';
+            // Could fetch /${forceId}/${neighId}/priorities here if desired
+        }
+
+        // =============================================
+        // CRIME MAP (Leaflet in tab)
+        // =============================================
+        function initCrimeMap() {
+            const mapContainer = document.getElementById('crime-map');
+            if (!mapContainer) return;
+            
+            if (crimeMap) {
+                crimeMap.remove();
+                crimeMap = null;
+            }
+            
+            crimeMap = L.map('crime-map').setView([currentLat, currentLng], 13);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap'
+            }).addTo(crimeMap);
+            
+            // Add crime markers
+            addCrimeMarkersToMap();
+            
+            // Fit to crimes if many
+            if (currentCrimes.length > 5) {
+                try {
+                    const group = L.featureGroup(crimeMarkers);
+                    crimeMap.fitBounds(group.getBounds().pad(0.2));
+                } catch (_) {}
+            }
+        }
+
+        function addCrimeMarkersToMap(filteredCrimes = null) {
+            if (!crimeMap) return;
+            
+            // Clear existing
+            crimeMarkers.forEach(m => m.remove());
+            crimeMarkers = [];
+            
+            const crimesToShow = filteredCrimes || currentCrimes;
+            
+            crimesToShow.forEach(crime => {
+                if (!crime.location || !crime.location.latitude) return;
+                
+                const lat = parseFloat(crime.location.latitude);
+                const lng = parseFloat(crime.location.longitude);
+                if (isNaN(lat) || isNaN(lng)) return;
+                
+                const marker = L.marker([lat, lng]);
+                const popupHtml = `
+                    <strong>${crime.category.replace(/-/g, ' ')}</strong><br>
+                    <small>${crime.location.street ? crime.location.street.name : 'Unknown street'}</small><br>
+                    <span class="badge bg-secondary mt-1">${crime.outcome_status ? crime.outcome_status.category : 'Under investigation'}</span>
+                `;
+                marker.bindPopup(popupHtml);
+                marker.addTo(crimeMap);
+                crimeMarkers.push(marker);
+            });
+        }
+
+        function filterCrimeMarkers() {
+            if (!crimeMap || !currentCrimes.length) return;
+            
+            const selected = document.getElementById('crime-category-filter').value;
+            
+            const filtered = selected 
+                ? currentCrimes.filter(c => c.category === selected)
+                : currentCrimes;
+            
+            addCrimeMarkersToMap(filtered);
+        }
+
+        // =============================================
+        // STATISTICS TAB - Charts & Table (built on tab show)
+        // =============================================
+        
+        // Listen for tab changes to lazy-load heavy charts
+        document.addEventListener('shown.bs.tab', function (event) {
+            if (event.target.id === 'stats-tab-btn') {
+                buildStatisticsCharts();
+            }
+            if (event.target.id === 'crime-map-tab-btn' && !crimeMap) {
+                initCrimeMap();
+            }
+        });
+
+        async function buildStatisticsCharts() {
+            if (!currentCrimes.length) {
+                showToast('No crime data available for charts', 'warning');
+                return;
+            }
+            
+            // 1. Category bar chart (improved from original doughnut)
+            buildCategoryBarChart();
+            
+            // 2. Trend line chart (multi-month)
+            await buildTrendLineChart();
+            
+            // 3. Populate recent crimes table
+            populateCrimesTable();
+            
+            // 4. Stop & search summary
+            await loadStopAndSearchSummary();
+        }
+
+        function buildCategoryBarChart() {
+            const ctx = document.getElementById('category-chart');
+            if (!ctx) return;
+            
+            if (categoryChart) categoryChart.destroy();
+            
+            const counts = {};
+            currentCrimes.forEach(c => counts[c.category] = (counts[c.category]||0) + 1);
+            
+            const labels = Object.keys(counts).map(l => l.replace(/-/g, ' '));
+            const data = Object.values(counts);
+            
+            categoryChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Number of crimes',
+                        data: data,
+                        backgroundColor: '#003087',
+                        borderColor: '#00a3e0',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { x: { beginAtZero: true } }
+                }
+            });
+        }
+
+        async function buildTrendLineChart() {
+            const ctx = document.getElementById('trend-chart');
+            if (!ctx || !currentForceId && !currentLat) return;
+            
+            if (trendChart) trendChart.destroy();
+            
+            const months = [];
+            const counts = [];
+            const today = new Date();
+            
+            // Fetch last 6 months (note: may hit rate limits in real use, but fine for demo)
+            for (let i = 5; i >= 0; i--) {
+                const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+                const dateStr = d.toISOString().substring(0, 7);
+                months.push(d.toLocaleString('default', { month: 'short' }) + ' ' + d.getFullYear());
+                
+                try {
+                    let url;
+                    if (currentForceId) {
+                        // For simplicity use lat/lng even for force
+                        url = `https://data.police.uk/api/crimes-street/all-crime?lat=${currentLat}&lng=${currentLng}&date=${dateStr}`;
+                    } else {
+                        url = `https://data.police.uk/api/crimes-street/all-crime?lat=${currentLat}&lng=${currentLng}&date=${dateStr}`;
+                    }
+                    const res = await fetch(url);
+                    const data = await res.json();
+                    counts.push(Array.isArray(data) ? data.length : 0);
+                } catch (_) {
+                    counts.push(0);
+                }
+            }
+            
+            trendChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: months,
+                    datasets: [{
+                        label: 'Crimes per month',
+                        data: counts,
+                        borderColor: '#00a3e0',
+                        backgroundColor: 'rgba(0, 163, 224, 0.1)',
+                        tension: 0.3,
+                        fill: true,
+                        pointBackgroundColor: '#003087'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+        }
+
+        function populateCrimesTable() {
+            const tbody = document.querySelector('#crimes-table tbody');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            
+            // Show up to 15 recent
+            const recent = [...currentCrimes].slice(0, 15);
+            
+            recent.forEach(crime => {
+                const row = document.createElement('tr');
+                const date = crime.month || '—';
+                const cat = (crime.category || '').replace(/-/g, ' ');
+                const loc = crime.location && crime.location.street ? crime.location.street.name : '—';
+                const outcome = crime.outcome_status ? crime.outcome_status.category : 'Under investigation';
+                
+                row.innerHTML = `
+                    <td>${date}</td>
+                    <td><span class="badge bg-light text-dark">${cat}</span></td>
+                    <td class="text-truncate" style="max-width:160px">${loc}</td>
+                    <td><span class="small">${outcome}</span></td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        async function loadStopAndSearchSummary() {
+            const body = document.getElementById('stop-search-body');
+            const countEl = document.getElementById('stop-search-count');
+            if (!body) return;
+            
+            body.innerHTML = '<div class="text-muted small">Loading stop & search data...</div>';
+            
+            try {
+                let dateStr = '2025-04';
+                try {
+                    const last = await fetch('https://data.police.uk/api/crime-last-updated');
+                    const lj = await last.json();
+                    if (lj.date) dateStr = lj.date.substring(0,7);
+                } catch(_) {}
+                
+                const url = `https://data.police.uk/api/stops-street?lat=${currentLat}&lng=${currentLng}&date=${dateStr}`;
+                const res = await fetch(url);
+                const stops = await res.json();
+                
+                const totalStops = Array.isArray(stops) ? stops.length : 0;
+                countEl.textContent = `${totalStops} records`;
+                
+                if (totalStops === 0) {
+                    body.innerHTML = '<p class="small text-muted mb-0">No stop and search records found for this location in the latest period.</p>';
+                    return;
+                }
+                
+                // Simple breakdown by reason if available
+                const reasons = {};
+                stops.forEach(s => {
+                    const r = s.object_of_search || 'Other';
+                    reasons[r] = (reasons[r] || 0) + 1;
+                });
+                
+                let html = `<p class="mb-2 small">Total stop & searches: <strong>${totalStops}</strong></p><div class="row g-2">`;
+                Object.entries(reasons).slice(0,4).forEach(([reason, cnt]) => {
+                    html += `<div class="col-6"><div class="small p-2 bg-light rounded">${reason}: <strong>${cnt}</strong></div></div>`;
+                });
+                html += '</div>';
+                body.innerHTML = html;
+                
+            } catch (e) {
+                body.innerHTML = '<p class="small text-muted">Stop & search data not available for every location.</p>';
+                countEl.textContent = '—';
+            }
+        }
+
+        function exportCrimesCSV() {
+            if (!currentCrimes.length) {
+                showToast('No data to export', 'warning');
+                return;
+            }
+            
+            let csv = 'Date,Category,Street,Outcome,Latitude,Longitude\n';
+            currentCrimes.forEach(c => {
+                const date = c.month || '';
+                const cat = c.category || '';
+                const street = c.location && c.location.street ? c.location.street.name.replace(/,/g, ' ') : '';
+                const outcome = c.outcome_status ? c.outcome_status.category.replace(/,/g, ' ') : '';
+                const lat = c.location ? c.location.latitude : '';
+                const lng = c.location ? c.location.longitude : '';
+                csv += `${date},${cat},${street},${outcome},${lat},${lng}\n`;
+            });
+            
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `uk-police-crimes-${currentAreaName.replace(/\s/g, '-')}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            showToast('CSV exported successfully');
+        }
+
+        // =============================================
+        // COMPARISON FEATURE (added extra value)
+        // =============================================
+        function showComparisonModal() {
+            const modal = new bootstrap.Modal(document.getElementById('comparisonModal'));
+            document.getElementById('compare-area1').value = currentAreaName || 'Current area';
+            
+            // Populate second force select
+            const forceSel = document.getElementById('compare-force2');
+            forceSel.innerHTML = '<option value="">Select force for comparison...</option>';
+            
+            // Reuse the main force list if possible, or fetch again
+            fetch('https://data.police.uk/api/forces')
+                .then(r => r.json())
+                .then(forces => {
+                    forces.forEach(f => {
+                        const opt = document.createElement('option');
+                        opt.value = f.id;
+                        opt.textContent = f.name;
+                        forceSel.appendChild(opt);
+                    });
+                });
+            
+            document.getElementById('comparison-results').classList.add('d-none');
+            modal.show();
+        }
+
+        async function loadCompareNeighbourhoods() {
+            const forceId = document.getElementById('compare-force2').value;
+            const neighSel = document.getElementById('compare-neigh2');
+            neighSel.innerHTML = '<option value="">Select neighbourhood...</option>';
+            
+            if (!forceId) return;
+            
+            try {
+                const res = await fetch(`https://data.police.uk/api/${forceId}/neighbourhoods`);
+                const neighs = await res.json();
+                neighs.forEach(n => {
+                    const opt = document.createElement('option');
+                    opt.value = n.id;
+                    opt.textContent = n.name;
+                    neighSel.appendChild(opt);
+                });
+            } catch (e) {
+                showToast('Could not load comparison neighbourhoods', 'danger');
+            }
+        }
+
+        async function runComparison() {
+            const force2 = document.getElementById('compare-force2').value;
+            const neigh2 = document.getElementById('compare-neigh2').value;
+            
+            if (!force2) {
+                showToast('Please select a second force', 'danger');
+                return;
+            }
+            
+            const loading = document.getElementById('comparison-loading');
+            const results = document.getElementById('comparison-results');
+            loading.classList.remove('d-none');
+            results.classList.add('d-none');
+            
+            try {
+                const center2 = FORCE_CENTERS[force2] || { lat: 52.5, lng: -1.5 };
+                const display2 = document.getElementById('compare-neigh2').options[document.getElementById('compare-neigh2').selectedIndex]?.text || force2;
+                
+                // Fetch crimes for area 2
+                let dateStr = '2025-04';
+                try {
+                    const last = await fetch('https://data.police.uk/api/crime-last-updated');
+                    const lj = await last.json();
+                    if (lj.date) dateStr = lj.date.substring(0,7);
+                } catch(_) {}
+                
+                const crimes2Res = await fetch(`https://data.police.uk/api/crimes-street/all-crime?lat=${center2.lat}&lng=${center2.lng}&date=${dateStr}`);
+                const crimes2 = await crimes2Res.json();
+                
+                const counts2 = {};
+                (crimes2 || []).forEach(c => counts2[c.category] = (counts2[c.category]||0)+1);
+                
+                // Current area counts
+                const counts1 = {};
+                currentCrimes.forEach(c => counts1[c.category] = (counts1[c.category]||0)+1);
+                
+                // Render side by side stats
+                const statsRow = document.getElementById('compare-stats-row');
+                statsRow.innerHTML = `
+                    <div class="col-md-6">
+                        <div class="card"><div class="card-body text-center">
+                            <div class="text-muted small">Current area</div>
+                            <div class="big-number">${currentCrimes.length}</div>
+                            <div class="small">${currentAreaName}</div>
+                        </div></div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card"><div class="card-body text-center">
+                            <div class="text-muted small">Comparison area</div>
+                            <div class="big-number">${crimes2.length}</div>
+                            <div class="small">${display2}</div>
+                        </div></div>
+                    </div>
+                `;
+                
+                // Comparison chart
+                if (compareChart) compareChart.destroy();
+                const ctx = document.getElementById('compare-chart');
+                
+                const allCats = [...new Set([...Object.keys(counts1), ...Object.keys(counts2)])].sort();
+                const data1 = allCats.map(c => counts1[c] || 0);
+                const data2 = allCats.map(c => counts2[c] || 0);
+                
+                compareChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: allCats.map(c => c.replace(/-/g,' ')),
+                        datasets: [
+                            { label: currentAreaName || 'Area 1', data: data1, backgroundColor: '#003087' },
+                            { label: display2 || 'Area 2', data: data2, backgroundColor: '#00a3e0' }
+                        ]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, scales: { x: { ticks: { maxRotation: 45 } } } }
+                });
+                
+                loading.classList.add('d-none');
+                results.classList.remove('d-none');
+                
+            } catch (err) {
+                loading.classList.add('d-none');
+                showToast('Comparison failed. Try different areas.', 'danger');
+            }
+        }
+
+        // =============================================
+        // REFRESH & NAVIGATION
+        // =============================================
+        async function refreshCurrentData() {
+            if (!currentLat || !currentAreaName) return;
+            showToast('Refreshing data...');
+            await loadCrimeDataAndStats(currentLat, currentLng);
+            // Rebuild charts if on stats tab
+            const statsTab = document.getElementById('stats-tab');
+            if (statsTab && statsTab.classList.contains('active')) {
+                buildStatisticsCharts();
+            }
+            if (crimeMap) {
+                crimeMap.remove();
+                crimeMap = null;
+                initCrimeMap();
+            }
+        }
+
+        function showLandingView() {
+            document.getElementById('dashboard-view').classList.add('d-none');
+            document.getElementById('landing-view').classList.remove('d-none');
+            document.getElementById('back-to-landing').classList.add('d-none');
+            
+            // Cleanup maps/charts to free memory
+            if (crimeMap) { crimeMap.remove(); crimeMap = null; }
+            if (categoryChart) { categoryChart.destroy(); categoryChart = null; }
+            if (trendChart) { trendChart.destroy(); trendChart = null; }
+            
+            // Re-init forces map if needed (in case user returns)
+            setTimeout(() => {
+                if (!forcesMap || !document.getElementById('forces-map')) {
+                    initForcesMap();
+                }
+            }, 100);
+        }
+
+        // =============================================
+        // INITIAL BOOTSTRAP & EVENT LISTENERS
+        // =============================================
+        async function initializeApp() {
+            console.log('%c[UK Police Dashboard] Initializing improved version...', 'color:#003087');
+            
+            // Initialize landing page (forces list + map)
+            await initLanding();
+            
+            // Optional: Pre-select a popular area on very first load for demo (comment out in production)
+            // setTimeout(() => {
+            //     selectQuickArea('greater-manchester-police', 'commercial-district', 53.4808, -2.2426, 'Commercial District, Greater Manchester Police');
+            // }, 800);
+            
+            // Keyboard support for postcode
+            const pcInput = document.getElementById('postcode-input');
+            if (pcInput) {
+                pcInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') searchByPostcode();
+                });
+            }
+            
+            // Make sure nav postcode also works with enter
+            const navPc = document.getElementById('nav-postcode');
+            if (navPc) {
+                navPc.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') quickPostcodeSearch();
+                });
+            }
+            
+            // Accessibility / final polish
+            console.log('%c[UK Police Dashboard] Ready. Mobile-friendly with Bootstrap 5, multiple charts, team data, comparison modal, and faithful replication of police.uk flows.', 'color:#00a3e0');
+            
+            showToast('Dashboard loaded. Try the postcode search or explore the map!', 'success');
+        }
+
+        // Boot the application
+        window.onload = initializeApp;
+        
+        // Expose some functions for debugging if needed
+        window.UKPoliceDashboard = { showLandingView, refreshCurrentData };
+    </script>
 </body>
 </html>
