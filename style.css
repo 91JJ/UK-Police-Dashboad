@@ -256,3 +256,12 @@ input, select {
 .dark .badge {
   background: #334155;
 }
+.dark .btn {
+  color: #e2e8f0;
+  border-color: #475569;
+  background: #334155;
+}
+
+.dark .btn-primary {
+  color: white;
+}
