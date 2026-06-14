@@ -3,281 +3,109 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>UK Police • Dashboard</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <title>UK Police Dashboard</title>
+  <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    .tab-active { border-bottom: 3px solid #3b82f6; color: #3b82f6; font-weight: 600; }
-    .glass { background: rgba(255,255,255,0.95); backdrop-filter: blur(12px); }
-    .dark .glass { background: rgba(15,23,42,0.95); }
-    .section { animation: fadeIn 0.3s ease; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } }
-  </style>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
 </head>
-<body class="bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
-  <div class="max-w-screen-xl mx-auto">
+<body>
+  <div class="container">
     <!-- Header -->
-    <div class="flex items-center justify-between px-6 py-5 border-b bg-white dark:bg-slate-900">
+    <header class="header">
       <div class="flex items-center gap-3">
-        <div class="w-10 h-10 bg-blue-600 rounded-2xl flex items-center justify-center text-white font-bold text-3xl">P</div>
+        <div class="logo">P</div>
         <div>
-          <div class="font-semibold text-3xl tracking-tight">UK Police</div>
-          <div class="text-xs text-slate-500 -mt-1">Open Data Dashboard</div>
+          <h1>UK Police Dashboard</h1>
+          <p class="subtitle">data.police.uk • Live</p>
         </div>
       </div>
-      <div class="flex items-center gap-4">
-        <div id="last-updated" class="text-xs px-3 py-1.5 bg-slate-200 dark:bg-slate-800 rounded-full"></div>
-        <button onclick="toggleDarkMode()" class="px-4 py-2 text-sm border rounded-2xl">🌓</button>
-      </div>
-    </div>
+      <button onclick="toggleDarkMode()" class="btn">🌓 Dark</button>
+    </header>
 
-    <!-- Tabs -->
-    <div class="flex overflow-x-auto border-b bg-white dark:bg-slate-900 px-2">
-      <div onclick="switchTab(0)" class="tab px-6 py-4 cursor-pointer tab-active" id="tab-0">Crime Map</div>
-      <div onclick="switchTab(1)" class="tab px-6 py-4 cursor-pointer" id="tab-1">Forces</div>
-      <div onclick="switchTab(2)" class="tab px-6 py-4 cursor-pointer" id="tab-2">Compare</div>
-      <div onclick="switchTab(3)" class="tab px-6 py-4 cursor-pointer" id="tab-3">Stop &amp; Search</div>
-      <div onclick="switchTab(4)" class="tab px-6 py-4 cursor-pointer" id="tab-4">Data</div>
-    </div>
-
-    <!-- Tab Content -->
-    <div class="p-4 md:p-8">
-
-      <!-- TAB 0: Crime Map -->
-      <div id="content-0" class="tab-content">
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <div class="lg:col-span-3">
-            <!-- Location controls (same as before but cleaner) -->
-            <div class="bg-white dark:bg-slate-900 rounded-3xl border p-5 space-y-4">
-              <div class="font-semibold">Location</div>
-              <div class="grid grid-cols-2 gap-2">
-                <button onclick="quickLocation(51.5074,-0.1278)" class="py-2 bg-slate-100 dark:bg-slate-800 rounded-2xl text-sm">London</button>
-                <button onclick="quickLocation(53.4808,-2.2426)" class="py-2 bg-slate-100 dark:bg-slate-800 rounded-2xl text-sm">Manchester</button>
-              </div>
-              <div class="grid grid-cols-2 gap-3">
-                <input id="lat" value="51.5074" class="px-3 py-2 border rounded-2xl text-sm dark:bg-slate-950">
-                <input id="lng" value="-0.1278" class="px-3 py-2 border rounded-2xl text-sm dark:bg-slate-950">
-              </div>
-              <button onclick="loadCrimeData()" class="w-full py-3 bg-blue-600 text-white rounded-2xl font-semibold">Load Crime Data</button>
-            </div>
-          </div>
-
-          <div class="lg:col-span-9">
-            <div class="bg-white dark:bg-slate-900 rounded-3xl border p-4">
-              <div id="map" style="height: 520px; border-radius: 20px;"></div>
-            </div>
+    <!-- Setup Your Area -->
+    <div class="setup-card">
+      <h3 class="section-title">SETUP YOUR AREA</h3>
+      <div class="setup-grid">
+        <!-- Postcode -->
+        <div>
+          <label>Postcode</label>
+          <div class="flex gap-2">
+            <input id="postcode" type="text" placeholder="e.g. M1 1AA">
+            <button onclick="searchPostcode()" class="btn">Go</button>
           </div>
         </div>
-      </div>
 
-      <!-- TAB 1: Forces -->
-      <div id="content-1" class="tab-content hidden">
-        <div class="mb-4">
-          <select id="force-select" onchange="loadForceDetails()" class="px-4 py-3 border rounded-2xl w-full max-w-xs dark:bg-slate-900">
-            <option value="">Select a Force...</option>
+        <!-- Force -->
+        <div>
+          <label>Police Force</label>
+          <select id="force-select" onchange="loadNeighbourhoods()">
+            <option value="">Select Force...</option>
           </select>
         </div>
-        <div id="force-details" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
-      </div>
 
-      <!-- TAB 2: Compare Forces -->
-      <div id="content-2" class="tab-content hidden">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <select id="compare-force-1" class="w-full px-4 py-3 border rounded-2xl dark:bg-slate-900 mb-4"></select>
-            <div id="compare-1-details"></div>
-          </div>
-          <div>
-            <select id="compare-force-2" class="w-full px-4 py-3 border rounded-2xl dark:bg-slate-900 mb-4"></select>
-            <div id="compare-2-details"></div>
-          </div>
-        </div>
-        <button onclick="compareForces()" class="mt-6 w-full py-3 bg-blue-600 text-white rounded-2xl font-semibold">Compare These Forces</button>
-      </div>
-
-      <!-- TAB 3: Stop & Search -->
-      <div id="content-3" class="tab-content hidden">
-        <div class="bg-white dark:bg-slate-900 rounded-3xl border p-6">
-          <div class="flex gap-3 mb-4">
-            <input id="sas-lat" value="51.5074" class="flex-1 px-4 py-2 border rounded-2xl">
-            <input id="sas-lng" value="-0.1278" class="flex-1 px-4 py-2 border rounded-2xl">
-            <button onclick="loadStopAndSearch()" class="px-8 bg-blue-600 text-white rounded-2xl">Search</button>
-          </div>
-          <div id="sas-results" class="max-h-[500px] overflow-auto"></div>
+        <!-- Neighbourhood -->
+        <div>
+          <label>Neighbourhood / Area</label>
+          <select id="neighbourhood-select">
+            <option value="">All areas</option>
+          </select>
         </div>
       </div>
+      <button onclick="loadAllData()" class="btn-primary w-full mt-4">Load Data for My Area</button>
+    </div>
 
-      <!-- TAB 4: Data -->
-      <div id="content-4" class="tab-content hidden">
-        <div class="bg-white dark:bg-slate-900 rounded-3xl border p-6">
-          <h3 class="font-semibold mb-4">Available Data Categories</h3>
-          <div id="categories-list" class="grid grid-cols-2 md:grid-cols-3 gap-3"></div>
+    <!-- Main Content -->
+    <div class="main-content">
+      <!-- KPIs -->
+      <div id="kpi-row" class="kpi-grid"></div>
+
+      <!-- Map -->
+      <div class="card">
+        <div class="flex justify-between items-center mb-3">
+          <h3>Crime Map</h3>
+          <div class="flex gap-2">
+            <div id="total-crimes" class="badge"></div>
+            <button onclick="toggleHeatmap()" class="btn text-xs">Toggle Heatmap</button>
+          </div>
+        </div>
+        <div id="map"></div>
+      </div>
+
+      <!-- Charts Row -->
+      <div class="charts-grid">
+        <div class="card">
+          <h3>Crime by Category</h3>
+          <canvas id="category-chart"></canvas>
+        </div>
+        <div class="card">
+          <h3>Top Streets</h3>
+          <canvas id="streets-chart"></canvas>
         </div>
       </div>
 
+      <!-- Crime Table -->
+      <div class="card p-0">
+        <div class="table-header">
+          <h3>Recent Crimes</h3>
+          <button onclick="exportCSV()" class="btn text-sm">Export CSV</button>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr><th>Category</th><th>Street</th><th>Month</th></tr>
+            </thead>
+            <tbody id="crime-table"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
 
-  <script>
-    let map, markerCluster;
-    let forcesList = [];
-
-    function initTailwind() {
-      if (localStorage.theme === 'dark') document.documentElement.classList.add('dark');
-    }
-
-    function toggleDarkMode() {
-      document.documentElement.classList.toggle('dark');
-      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
-    }
-
-    function switchTab(tabIndex) {
-      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-      document.querySelectorAll('.tab').forEach(el => el.classList.remove('tab-active'));
-      
-      document.getElementById(`content-${tabIndex}`).classList.remove('hidden');
-      document.getElementById(`tab-${tabIndex}`).classList.add('tab-active');
-    }
-
-    // ==================== FORCE APIs ====================
-    async function loadForces() {
-      const res = await fetch('https://data.police.uk/api/forces');
-      forcesList = await res.json();
-      
-      const select1 = document.getElementById('force-select');
-      const select2 = document.getElementById('compare-force-1');
-      const select3 = document.getElementById('compare-force-2');
-
-      forcesList.forEach(force => {
-        const opt = new Option(force.name, force.id);
-        select1.add(opt.cloneNode(true));
-        select2.add(opt.cloneNode(true));
-        select3.add(opt.cloneNode(true));
-      });
-    }
-
-    async function loadForceDetails() {
-      const id = document.getElementById('force-select').value;
-      if (!id) return;
-
-      const [forceRes, neighRes] = await Promise.all([
-        fetch(`https://data.police.uk/api/forces/${id}`),
-        fetch(`https://data.police.uk/api/${id}/neighbourhoods`)
-      ]);
-
-      const force = await forceRes.json();
-      const neighbourhoods = await neighRes.json();
-
-      document.getElementById('force-details').innerHTML = `
-        <div class="bg-white dark:bg-slate-900 rounded-3xl border p-6">
-          <h3 class="text-2xl font-semibold">${force.name}</h3>
-          <p class="text-slate-500 mt-1">${force.description || 'No description available'}</p>
-          
-          <div class="mt-6 grid grid-cols-2 gap-4 text-sm">
-            <div><span class="text-slate-500">Engagement</span><br><strong>${force.engagement_methods?.length || 0}</strong> methods</div>
-            <div><span class="text-slate-500">Neighbourhoods</span><br><strong>${neighbourhoods.length}</strong></div>
-          </div>
-        </div>
-        
-        <div class="bg-white dark:bg-slate-900 rounded-3xl border p-6">
-          <h4 class="font-semibold mb-3">Neighbourhoods</h4>
-          <div class="max-h-[300px] overflow-auto text-sm space-y-1">
-            ${neighbourhoods.map(n => `<div class="py-1 border-b">${n.name}</div>`).join('')}
-          </div>
-        </div>
-      `;
-    }
-
-    // ==================== COMPARE FORCES ====================
-    async function compareForces() {
-      const id1 = document.getElementById('compare-force-1').value;
-      const id2 = document.getElementById('compare-force-2').value;
-      if (!id1 || !id2) return alert('Please select two forces');
-
-      const [f1, f2] = await Promise.all([
-        fetch(`https://data.police.uk/api/forces/${id1}`).then(r => r.json()),
-        fetch(`https://data.police.uk/api/forces/${id2}`).then(r => r.json())
-      ]);
-
-      document.getElementById('compare-1-details').innerHTML = `<div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border"><strong>${f1.name}</strong></div>`;
-      document.getElementById('compare-2-details').innerHTML = `<div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border"><strong>${f2.name}</strong></div>`;
-    }
-
-    // ==================== STOP & SEARCH ====================
-    async function loadStopAndSearch() {
-      const lat = document.getElementById('sas-lat').value;
-      const lng = document.getElementById('sas-lng').value;
-
-      const res = await fetch(`https://data.police.uk/api/stops-street?lat=${lat}&lng=${lng}`);
-      const data = await res.json();
-
-      const container = document.getElementById('sas-results');
-      container.innerHTML = data.length > 0 
-        ? data.map(s => `<div class="p-3 border-b">${s.object_of_search || 'Unknown'} • ${s.age_range || 'Unknown age'}</div>`).join('')
-        : '<p class="text-slate-500">No stop & search records found.</p>';
-    }
-
-    // ==================== CRIME MAP (existing) ====================
-    function initCrimeMap() {
-      if (map) return;
-      map = L.map('map').setView([51.5074, -0.1278], 12);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-      markerCluster = L.markerClusterGroup();
-      map.addLayer(markerCluster);
-    }
-
-    async function loadCrimeData() {
-      const lat = document.getElementById('lat').value;
-      const lng = document.getElementById('lng').value;
-
-      const res = await fetch(`https://data.police.uk/api/crimes-street/all-crime?lat=${lat}&lng=${lng}&date=2024-06`);
-      const crimes = await res.json();
-
-      markerCluster.clearLayers();
-      crimes.forEach(c => {
-        if (c.location?.latitude) {
-          const m = L.marker([parseFloat(c.location.latitude), parseFloat(c.location.longitude)]);
-          m.bindPopup(c.category);
-          markerCluster.addLayer(m);
-        }
-      });
-    }
-
-    function quickLocation(lat, lng) {
-      document.getElementById('lat').value = lat;
-      document.getElementById('lng').value = lng;
-      loadCrimeData();
-    }
-
-    // ==================== INIT ====================
-    async function init() {
-      initTailwind();
-      initCrimeMap();
-      await loadForces();
-
-      // Load last updated
-      try {
-        const r = await fetch('https://data.police.uk/api/crime-last-updated');
-        const d = await r.json();
-        document.getElementById('last-updated').innerHTML = `Data as of <span class="font-medium">${d.date}</span>`;
-      } catch (_) {}
-
-      // Load categories for Data tab
-      const catRes = await fetch('https://data.police.uk/api/crime-categories?date=2024-06');
-      const categories = await catRes.json();
-      document.getElementById('categories-list').innerHTML = categories.map(c => 
-        `<div class="px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-2xl text-sm">${c.name}</div>`
-      ).join('');
-
-      // Default load crime map
-      setTimeout(() => loadCrimeData(), 800);
-    }
-
-    window.onload = init;
-  </script>
+  <!-- Scripts -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="script.js"></script>
 </body>
 </html>
