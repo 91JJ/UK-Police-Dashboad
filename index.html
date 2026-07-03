@@ -1184,10 +1184,14 @@
             // 5. Populate overview tab
             populateOverviewTab(neighData, currentForceData);
             
-            // 6. Initialize crime map (will be shown when tab activated)
-            // We init it here but it will be visible on tab switch
+            // 6. If the crime map tab is already visible, initialize and resize the map.
+            // Otherwise Bootstrap's shown.bs.tab listener will initialize it when needed.
             setTimeout(() => {
-                if (!crimeMap) initCrimeMap();
+                const crimeMapTab = document.getElementById('crime-map-tab');
+                if (crimeMapTab && crimeMapTab.classList.contains('show')) {
+                    if (!crimeMap) initCrimeMap();
+                    refreshCrimeMapSize();
+                }
             }, 300);
             
             // 7. Preload some stats data for Statistics tab (category + trend)
@@ -1542,6 +1546,16 @@
         // =============================================
         // CRIME MAP (Leaflet in tab)
         // =============================================
+        function refreshCrimeMapSize() {
+            if (!crimeMap) return;
+            
+            requestAnimationFrame(() => {
+                setTimeout(() => {
+                    if (crimeMap) crimeMap.invalidateSize();
+                }, 50);
+            });
+        }
+
         function initCrimeMap() {
             const mapContainer = document.getElementById('crime-map');
             if (!mapContainer) return;
@@ -1581,6 +1595,8 @@
             } else {
                 crimeMap.setView([currentLat, currentLng], 13);
             }
+            
+            refreshCrimeMapSize();
         }
 
         function addCrimeMarkersToMap(filteredCrimes = null) {
@@ -1704,8 +1720,9 @@
             if (event.target.id === 'stats-tab-btn') {
                 buildStatisticsCharts();
             }
-            if (event.target.id === 'crime-map-tab-btn' && !crimeMap) {
-                initCrimeMap();
+            if (event.target.id === 'crime-map-tab-btn') {
+                if (!crimeMap) initCrimeMap();
+                refreshCrimeMapSize();
             }
         });
 
