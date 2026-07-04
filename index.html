@@ -583,9 +583,8 @@
                 <div class="tab-pane fade" id="team-tab" role="tabpanel">
                     <div class="alert alert-light small mb-3">
                         <i class="bi bi-info-circle me-1"></i> 
-                        <strong>Your Local Team</strong> — Detailed neighbourhood team, events and priorities 
-                        (from <code>/team</code>, <code>/events</code>, <code>/priorities</code> endpoints). 
-                        Available when a specific neighbourhood is selected. Postcode search shows area crime data instead.
+                        <strong>Your Local Team</strong> — Neighbourhood policing team, upcoming events and current priorities 
+                        (sourced from the official <code>/team</code>, <code>/events</code> and <code>/priorities</code> endpoints where available).
                     </div>
                     <div id="team-grid" class="row g-3">
                         <!-- Officer cards populated dynamically -->
@@ -1281,17 +1280,14 @@
             if (forceId && neighId) {
                 await loadLocalTeam(forceId, neighId);
             } else if (forceId && !neighId) {
-                // This path is hit by postcode searches and some quick cards.
-                // We cannot call the /team, /events, /priorities endpoints without a real neighbourhood ID.
-                // This is a hard limitation of the public data.police.uk API.
+                // Postcode / area-level selection (no specific neighbourhood chosen)
                 document.getElementById('team-grid').innerHTML = `
                     <div class="col-12">
-                        <div class="alert alert-warning small border-0 shadow-sm">
+                        <div class="alert alert-info small border-0 shadow-sm">
                             <strong>Your Local Team</strong><br>
-                            Postcode search gives you excellent crime data + force overview for your area.<br><br>
-                            However, detailed <strong>Local Team, Upcoming Events &amp; Priorities</strong> require you to select a <strong>specific neighbourhood</strong> 
-                            using the dropdown or by clicking a force marker on the map.<br><br>
-                            <span class="text-muted small">This is a limitation of the official open data API (no public "postcode → exact neighbourhood" endpoint exists).</span>
+                            Detailed neighbourhood team, events and priorities are only available when you select a <strong>specific neighbourhood</strong>.<br><br>
+                            <span class="text-muted">Postcode search provides accurate crime statistics and force overview for your local area. 
+                            For full team information, please choose a neighbourhood from the dropdown or map.</span>
                         </div>
                     </div>`;
             } else {
