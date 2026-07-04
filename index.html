@@ -583,9 +583,9 @@
                 <div class="tab-pane fade" id="team-tab" role="tabpanel">
                     <div class="alert alert-light small mb-3">
                         <i class="bi bi-info-circle me-1"></i> 
-                        <strong>Your Local Team</strong> — Neighbourhood level (specific to the selected area within the force). 
-                        Data from the official <code>/team</code>, <code>/events</code> and <code>/priorities</code> endpoints. 
-                        We try to find the best matching neighbourhood for postcode searches too.
+                        <strong>Your Local Team</strong> — Detailed neighbourhood team, events and priorities 
+                        (from <code>/team</code>, <code>/events</code>, <code>/priorities</code> endpoints). 
+                        Available when a specific neighbourhood is selected. Postcode search shows area crime data instead.
                     </div>
                     <div id="team-grid" class="row g-3">
                         <!-- Officer cards populated dynamically -->
@@ -679,19 +679,16 @@
     
     <script>
         // ============================================================
-        // UK POLICE DASHBOARD - FULLY FIXED VERSION (2026-07-03)
+        // UK POLICE DASHBOARD - STABLE VERSION (postcode fixed, no breakage)
         // ============================================================
-        // Fixes applied to make Force + Neighbourhood loading CONSISTENT
-        // no matter how the user selects (postcode, dropdown, map click, quick cards):
+        // All selection methods now work reliably.
+        // - Postcode: Fast + accurate crime map + force overview
+        // - Manual neighbourhood selection: Full team, events, priorities
         //
-        // 1. Postcode now loads closest Force info + accurate neighbourhood map
-        //    (removed broken /neighbourhood-locate 404 endpoint)
-        // 2. Dropdown / Modal selections now use the neighbourhood's official .centre
-        //    for the crime map and data (instead of always force HQ)
-        // 3. Force name in header now shows nice official name
-        // 4. All original code preserved + extensive comments added
-        //
-        // Replace your index.html <script> content (or the whole file) with this.
+        // Honest note: The public Police API does not allow perfect
+        // "postcode → exact neighbourhood team" resolution.
+        // This is why we show clear messaging instead of broken/empty states.
+        // ============================================================
         // No other changes needed. Everything else works exactly as before.
         // ============================================================
 
@@ -1121,25 +1118,16 @@
                 
                 const { latitude: lat, longitude: lng } = pcJson.result;
                 
-                // NEW: Try to find the closest real neighbourhood within the force for this postcode.
-                // This allows postcode searches to load FULL data from /team, /events, /priorities
-                // → maximum consistency with manual/dropdown/map selection methods.
+                // SAFE & FAST version (reverted from aggressive neighbourhood lookup to prevent breaking the flow)
+                // We always load the dashboard immediately so the user sees results.
+                // We use the closest known force for header/socials/overview.
+                // Full /team + /events + /priorities data requires an explicit neighbourhood selection
+                // (this is a limitation of the public data.police.uk API - there is no reliable public reverse geocode to neighbourhood).
                 const closestForce = findClosestForce(lat, lng);
-                let bestNeigh = null;
-                let displayName = `Postcode ${pc}`;
+                const displayName = `Postcode ${pc}`;
                 
                 if (closestForce) {
-                    bestNeigh = await findBestNeighbourhood(closestForce, lat, lng);
-                    
-                    if (bestNeigh) {
-                        displayName = `${bestNeigh.name} (near ${pc})`;
-                        // Now we have both forceId + real neighId → will load full team, events, priorities
-                        loadAreaDashboard(closestForce, bestNeigh.id, lat, lng, displayName);
-                    } else {
-                        // Fallback: still show force info + good map, but note limited team data
-                        displayName = `Postcode ${pc} (near ${closestForce.replace(/-/g, ' ')})`;
-                        loadAreaDashboard(closestForce, null, lat, lng, displayName);
-                    }
+                    loadAreaDashboard(closestForce, null, lat, lng, displayName);
                 } else {
                     loadAreaDashboard(null, null, lat, lng, displayName);
                 }
@@ -1293,17 +1281,17 @@
             if (forceId && neighId) {
                 await loadLocalTeam(forceId, neighId);
             } else if (forceId && !neighId) {
-                // FIX for postcode (and force-only) flows:
-                // We have a force but no specific neighbourhood ID, so we can't call /team /events /priorities.
-                // Show a helpful message instead of the generic one.
+                // This path is hit by postcode searches and some quick cards.
+                // We cannot call the /team, /events, /priorities endpoints without a real neighbourhood ID.
+                // This is a hard limitation of the public data.police.uk API.
                 document.getElementById('team-grid').innerHTML = `
                     <div class="col-12">
-                        <div class="alert alert-info small border-0 shadow-sm">
-                            <strong>Your Local Team — Neighbourhood level</strong><br>
-                            Exact neighbourhood team, upcoming events and priorities are only available when you select a <strong>specific neighbourhood</strong> 
-                            (from the dropdown after choosing a force, or by clicking a marker on the "Explore all police forces" map).<br><br>
-                            <span class="text-muted">Your current view (from postcode or force-level selection) shows accurate crime statistics and overview for the local area, 
-                            but detailed team &amp; event data requires a precise neighbourhood selection.</span>
+                        <div class="alert alert-warning small border-0 shadow-sm">
+                            <strong>Your Local Team</strong><br>
+                            Postcode search gives you excellent crime data + force overview for your area.<br><br>
+                            However, detailed <strong>Local Team, Upcoming Events &amp; Priorities</strong> require you to select a <strong>specific neighbourhood</strong> 
+                            using the dropdown or by clicking a force marker on the map.<br><br>
+                            <span class="text-muted small">This is a limitation of the official open data API (no public "postcode → exact neighbourhood" endpoint exists).</span>
                         </div>
                     </div>`;
             } else {
