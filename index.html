@@ -584,7 +584,8 @@
                     <div class="alert alert-light small mb-3">
                         <i class="bi bi-info-circle me-1"></i> 
                         <strong>Your Local Team</strong> — Neighbourhood level (specific to the selected area within the force). 
-                        Data from the official <code>/team</code> endpoint where available.
+                        Data from the official <code>/team</code>, <code>/events</code> and <code>/priorities</code> endpoints. 
+                        We try to find the best matching neighbourhood for postcode searches too.
                     </div>
                     <div id="team-grid" class="row g-3">
                         <!-- Officer cards populated dynamically -->
@@ -790,6 +791,57 @@
                 }
             });
             return closestId;
+        }
+
+        // =============================================
+        // NEW HELPER: Find best matching neighbourhood for a lat/lng within a force
+        // This enables postcode searches to get full /team, /events, /priorities data
+        // for maximum consistency across all selection methods.
+        // =============================================
+        async function findBestNeighbourhood(forceId, targetLat, targetLng) {
+            if (!forceId) return null;
+            
+            try {
+                const neighList = await cachedFetch(`https://data.police.uk/api/${forceId}/neighbourhoods`);
+                if (!Array.isArray(neighList) || neighList.length === 0) return null;
+
+                let bestMatch = null;
+                let bestDistance = Infinity;
+
+                // Limit to first 30 neighbourhoods to keep it responsive (most forces have < 30)
+                const candidates = neighList.slice(0, 30);
+
+                // Fetch details in parallel (cachedFetch helps a lot on repeat visits)
+                const detailPromises = candidates.map(async (n) => {
+                    try {
+                        const detail = await cachedFetch(`https://data.police.uk/api/${forceId}/${n.id}`);
+                        if (detail && detail.centre && detail.centre.latitude && detail.centre.longitude) {
+                            const dist = Math.hypot(
+                                parseFloat(detail.centre.latitude) - targetLat,
+                                parseFloat(detail.centre.longitude) - targetLng
+                            );
+                            return { id: n.id, name: n.name, distance: dist };
+                        }
+                    } catch (_) {
+                        return null;
+                    }
+                    return null;
+                });
+
+                const results = await Promise.all(detailPromises);
+                
+                results.forEach(res => {
+                    if (res && res.distance < bestDistance) {
+                        bestDistance = res.distance;
+                        bestMatch = { id: res.id, name: res.name };
+                    }
+                });
+
+                return bestMatch;
+            } catch (e) {
+                console.warn('findBestNeighbourhood failed:', e);
+                return null;
+            }
         }
 
         // =============================================
@@ -1069,18 +1121,25 @@
                 
                 const { latitude: lat, longitude: lng } = pcJson.result;
                 
-                // FIX for postcode issue: /neighbourhood-locate endpoint returns 404 (deprecated/broken).
-                // Instead of failing to load force info, we use closest known force center to provide
-                // force details, social links, description etc. The lat/lng remains accurate from postcode
-                // so the crime map ALWAYS shows the correct neighbourhood area.
-                // This makes postcode selection consistent with manual: loads Force + good map for neigh/area.
-                // Note: exact neigh/team not available without working reverse lookup, but force info now is.
+                // NEW: Try to find the closest real neighbourhood within the force for this postcode.
+                // This allows postcode searches to load FULL data from /team, /events, /priorities
+                // → maximum consistency with manual/dropdown/map selection methods.
                 const closestForce = findClosestForce(lat, lng);
-                const displayName = `Postcode ${pc}`;
+                let bestNeigh = null;
+                let displayName = `Postcode ${pc}`;
                 
                 if (closestForce) {
-                    // Load with force info (for header, socials, overview) + accurate postcode lat/lng for map/crimes
-                    loadAreaDashboard(closestForce, null, lat, lng, displayName);
+                    bestNeigh = await findBestNeighbourhood(closestForce, lat, lng);
+                    
+                    if (bestNeigh) {
+                        displayName = `${bestNeigh.name} (near ${pc})`;
+                        // Now we have both forceId + real neighId → will load full team, events, priorities
+                        loadAreaDashboard(closestForce, bestNeigh.id, lat, lng, displayName);
+                    } else {
+                        // Fallback: still show force info + good map, but note limited team data
+                        displayName = `Postcode ${pc} (near ${closestForce.replace(/-/g, ' ')})`;
+                        loadAreaDashboard(closestForce, null, lat, lng, displayName);
+                    }
                 } else {
                     loadAreaDashboard(null, null, lat, lng, displayName);
                 }
