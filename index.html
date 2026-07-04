@@ -841,6 +841,63 @@
         }
 
         // =============================================
+        // NEW: Button action for postcode users to optionally load full team data
+        // This keeps initial postcode load fast, while giving users the option
+        // to enhance with real neighbourhood team/events/priorities.
+        // =============================================
+        async function tryLoadLocalTeamForCurrentArea() {
+            const grid = document.getElementById('team-grid');
+            if (!currentForceId || !currentLat || !currentLng) {
+                showToast('Unable to determine area for team lookup', 'danger');
+                return;
+            }
+
+            // Show loading state
+            grid.innerHTML = `
+                <div class="col-12 text-center py-3">
+                    <div class="loading-spinner mx-auto"></div>
+                    <div class="small text-muted mt-2">Searching for best matching neighbourhood...</div>
+                </div>`;
+
+            try {
+                const best = await findBestNeighbourhood(currentForceId, currentLat, currentLng);
+
+                if (best && best.id) {
+                    currentNeighId = best.id;
+                    
+                    // Update area name slightly if possible
+                    if (!currentAreaName.includes(best.name)) {
+                        currentAreaName = `${best.name} (near postcode)`;
+                        const areaNameEl = document.getElementById('dash-area-name');
+                        if (areaNameEl) areaNameEl.textContent = currentAreaName;
+                    }
+
+                    // Load the full team data
+                    await loadLocalTeam(currentForceId, best.id);
+
+                    showToast(`Loaded team data for ${best.name}`, 'success');
+                } else {
+                    grid.innerHTML = `
+                        <div class="col-12">
+                            <div class="alert alert-warning small">
+                                Could not find a matching neighbourhood for this location.<br>
+                                Please try selecting a neighbourhood manually from the dropdown or map.
+                            </div>
+                        </div>`;
+                }
+            } catch (err) {
+                console.error(err);
+                grid.innerHTML = `
+                    <div class="col-12">
+                        <div class="alert alert-danger small">
+                            Something went wrong while looking up the local team.<br>
+                            Please try selecting a neighbourhood manually.
+                        </div>
+                    </div>`;
+            }
+        }
+
+        // =============================================
         // UTILITY FUNCTIONS
         // =============================================
         
@@ -1286,8 +1343,15 @@
                         <div class="alert alert-info small border-0 shadow-sm">
                             <strong>Your Local Team</strong><br>
                             Detailed neighbourhood team, events and priorities are only available when you select a <strong>specific neighbourhood</strong>.<br><br>
-                            <span class="text-muted">Postcode search provides accurate crime statistics and force overview for your local area. 
-                            For full team information, please choose a neighbourhood from the dropdown or map.</span>
+                            <span class="text-muted">Postcode search provides accurate crime statistics and force overview for your local area.</span>
+                            
+                            <div class="mt-3">
+                                <button class="btn btn-sm btn-outline-primary" 
+                                        onclick="tryLoadLocalTeamForCurrentArea()">
+                                    <i class="bi bi-search me-1"></i> Try to load local team for this area
+                                </button>
+                                <div class="small text-muted mt-1">This may take a few seconds on first use.</div>
+                            </div>
                         </div>
                     </div>`;
             } else {
