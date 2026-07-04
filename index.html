@@ -1233,6 +1233,20 @@
             // 4. Load local team if force + neigh
             if (forceId && neighId) {
                 await loadLocalTeam(forceId, neighId);
+            } else if (forceId && !neighId) {
+                // FIX for postcode (and force-only) flows:
+                // We have a force but no specific neighbourhood ID, so we can't call /team /events /priorities.
+                // Show a helpful message instead of the generic one.
+                document.getElementById('team-grid').innerHTML = `
+                    <div class="col-12">
+                        <div class="alert alert-info small border-0 shadow-sm">
+                            <strong>Your Local Team — Neighbourhood level</strong><br>
+                            Exact neighbourhood team, upcoming events and priorities are only available when you select a <strong>specific neighbourhood</strong> 
+                            (from the dropdown after choosing a force, or by clicking a marker on the "Explore all police forces" map).<br><br>
+                            <span class="text-muted">Your current view (from postcode or force-level selection) shows accurate crime statistics and overview for the local area, 
+                            but detailed team &amp; event data requires a precise neighbourhood selection.</span>
+                        </div>
+                    </div>`;
             } else {
                 document.getElementById('team-grid').innerHTML = '<div class="col-12"><div class="alert alert-light">Local team data is available when a specific neighbourhood is selected.</div></div>';
             }
@@ -1510,14 +1524,21 @@
 
                 // === Events / Meetings ===
                 if (events.length > 0) {
-                    let eventHTML = `<div class="col-12 mt-3"><h6 class="fw-semibold">Upcoming Events &amp; Meetings</h6></div>`;
+                    let eventHTML = `<div class="col-12 mt-3"><h6 class="fw-semibold">Upcoming Events &amp; Meetings <span class="text-muted small">(click for details)</span></h6></div>`;
                     events.slice(0, 4).forEach(ev => {
                         const date = ev.date || '';
+                        const title = (ev.title || 'Event').replace(/'/g, "\\'");
+                        const location = (ev.location || '').replace(/'/g, "\\'");
+                        const description = (ev.description || ev.details || 'No further details available from the open data feed.').replace(/'/g, "\\'");
+                        
                         eventHTML += `
                             <div class="col-12 col-md-6">
-                                <div class="card card-body small mb-2">
+                                <div class="card card-body small mb-2 event-card" 
+                                     style="cursor: pointer; transition: all 0.2s;"
+                                     onclick="showEventModal('${title}', '${date}', '${location}', '${description}')">
                                     <strong>${ev.title || 'Event'}</strong><br>
                                     <span class="text-muted">${date} ${ev.location ? '• ' + ev.location : ''}</span>
+                                    <div class="small text-primary mt-1"><i class="bi bi-info-circle"></i> Click for more info</div>
                                 </div>
                             </div>
                         `;
@@ -1569,6 +1590,41 @@
             `;
             document.body.insertAdjacentHTML('beforeend', modalHtml);
             const modalEl = document.getElementById('officer-modal');
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+            modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove());
+        }
+
+        // NEW: Clickable events modal (fixes "can't click Upcoming Events")
+        function showEventModal(title, date, location, description) {
+            const modalHtml = `
+                <div class="modal fade" id="event-modal" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title"><i class="bi bi-calendar-event me-2"></i>${title}</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p class="mb-1"><strong>Date:</strong> ${date || 'Date to be confirmed'}</p>
+                                <p class="mb-2"><strong>Location:</strong> ${location || 'Location to be confirmed'}</p>
+                                <hr>
+                                <p class="small">${description}</p>
+                                <div class="alert alert-light small mt-3 mb-0">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    This information comes from the official data.police.uk open API. 
+                                    For the most up-to-date details or to RSVP, please check your local police force website.
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            const modalEl = document.getElementById('event-modal');
             const modal = new bootstrap.Modal(modalEl);
             modal.show();
             modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove());
