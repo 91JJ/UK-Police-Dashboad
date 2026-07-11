@@ -304,7 +304,7 @@
             <div class="row g-3 mb-5">
                 <!-- Quick cards - each has full data for instant dashboard load -->
                 <div class="col-6 col-md-4 col-lg-3">
-                    <div class="quick-card card h-100" onclick="selectQuickArea('metropolitan-police-service', 'westminster', 51.5074, -0.1278, 'Westminster, Metropolitan Police')">
+                    <div class="quick-card card h-100" onclick="selectQuickArea('metropolitan', 'westminster', 51.5074, -0.1278, 'Westminster, Metropolitan Police')">
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-start mb-2">
                                 <span class="badge bg-primary">London</span>
@@ -317,7 +317,7 @@
                     </div>
                 </div>
                 <div class="col-6 col-md-4 col-lg-3">
-                    <div class="quick-card card h-100" onclick="selectQuickArea('greater-manchester-police', 'commercial-district', 53.4808, -2.2426, 'Commercial District, Greater Manchester Police')">
+                    <div class="quick-card card h-100" onclick="selectQuickArea('greater-manchester', 'commercial-district', 53.4808, -2.2426, 'Commercial District, Greater Manchester Police')">
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-start mb-2">
                                 <span class="badge bg-success">Manchester</span>
@@ -405,7 +405,7 @@
     </div>
 
     <!-- =============================================
-         DASHBOARD VIEW - Replicates specific area page e.g. greater-manchester-police/commercial-district/
+         DASHBOARD VIEW - Replicates specific area page e.g. greater-manchester/commercial-district/
          Header with socials + contact, stats highlights, tabbed content
          Tabs: Overview | Crime Map | Statistics (graphs + comparison) | Local Team | Contact
          ============================================= -->
@@ -707,10 +707,19 @@
         let compareChart = null;
         let crimeMarkers = [];         // For filtering on crime map
         let currentForceData = null;   // Cache force details (socials etc)
+        let allForcesCache = null;
 
         // Lightweight in-memory + localStorage cache to reduce 429 rate limits on data.police.uk
         const apiCache = new Map();
         const CACHE_TTL = 1000 * 60 * 10; // 10 minutes
+
+        const FORCE_ID_ALIASES = {
+            'metropolitan-police-service': 'metropolitan',
+            'metropolitan-police': 'metropolitan',
+            'met-police': 'metropolitan',
+            'greater-manchester-police': 'greater-manchester',
+            'gmp': 'greater-manchester'
+        };
 
         async function cachedFetch(url, options = {}) {
             const key = url;
@@ -748,10 +757,105 @@
             }
         }
 
+        function normalizeForceLabel(value) {
+            return (value || '')
+                .toString()
+                .toLowerCase()
+                .replace(/&/g, 'and')
+                .replace(/[()'.,]/g, '')
+                .replace(/\b(police|service|constabulary|force)\b/g, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+
+        async function getAllForces() {
+            if (Array.isArray(allForcesCache) && allForcesCache.length > 0) {
+                return allForcesCache;
+            }
+            const forces = await cachedFetch('https://data.police.uk/api/forces');
+            allForcesCache = Array.isArray(forces) ? forces : [];
+            return allForcesCache;
+        }
+
+        async function resolveForceId(forceInput) {
+            if (!forceInput) return null;
+
+            const raw = forceInput.toString().trim();
+            if (!raw) return null;
+
+            const lower = raw.toLowerCase();
+            const forces = await getAllForces();
+            if (!forces.length) return null;
+
+            // 1) Exact ID match
+            if (forces.some(f => f.id === lower)) return lower;
+
+            // 2) Alias match
+            if (FORCE_ID_ALIASES[lower] && forces.some(f => f.id === FORCE_ID_ALIASES[lower])) {
+                return FORCE_ID_ALIASES[lower];
+            }
+
+            // 3) Name/label normalization match
+            const targetNorm = normalizeForceLabel(raw.replace(/-/g, ' '));
+            const exactName = forces.find(f => normalizeForceLabel(f.name) === targetNorm);
+            if (exactName) return exactName.id;
+
+            // 4) Fuzzy contains match
+            const partialName = forces.find(f => {
+                const nameNorm = normalizeForceLabel(f.name);
+                return nameNorm.includes(targetNorm) || targetNorm.includes(nameNorm);
+            });
+            if (partialName) return partialName.id;
+
+            return null;
+        }
+
+        async function locateNeighbourhoodByCoords(lat, lng) {
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+            const located = await cachedFetch(`https://data.police.uk/api/locate-neighbourhood?q=${lat},${lng}`);
+            if (located && located.force && located.neighbourhood) {
+                return { forceId: located.force, neighId: located.neighbourhood };
+            }
+            return null;
+        }
+
+        async function resolveAreaSelection(forceId, neighId, lat, lng, pfaName = null) {
+            let resolvedForceId = await resolveForceId(forceId);
+            let resolvedNeighId = neighId || null;
+
+            // Use official reverse lookup by coordinates when possible.
+            if (Number.isFinite(lat) && Number.isFinite(lng) && (!resolvedForceId || !resolvedNeighId)) {
+                const located = await locateNeighbourhoodByCoords(lat, lng);
+                if (located) {
+                    if (!resolvedForceId) resolvedForceId = await resolveForceId(located.forceId);
+                    if (!resolvedNeighId) resolvedNeighId = located.neighId;
+                }
+            }
+
+            // Postcode API includes PFA name, useful as a reliable force hint.
+            if (!resolvedForceId && pfaName) {
+                resolvedForceId = await resolveForceId(pfaName);
+            }
+
+            // Last fallback to nearest force center so force-level data still works.
+            if (!resolvedForceId && Number.isFinite(lat) && Number.isFinite(lng)) {
+                const nearest = findClosestForce(lat, lng);
+                resolvedForceId = await resolveForceId(nearest);
+            }
+
+            // Ensure neighbourhood-level endpoints are attempted for every selection path.
+            if (resolvedForceId && !resolvedNeighId && Number.isFinite(lat) && Number.isFinite(lng)) {
+                const best = await findBestNeighbourhood(resolvedForceId, lat, lng);
+                if (best && best.id) resolvedNeighId = best.id;
+            }
+
+            return { forceId: resolvedForceId, neighId: resolvedNeighId };
+        }
+
         // Predefined force centers for reliable map centering and dropdown fallback
         const FORCE_CENTERS = {
-            'metropolitan-police-service': { lat: 51.5074, lng: -0.1278 },
-            'greater-manchester-police': { lat: 53.4808, lng: -2.2426 },
+            'metropolitan': { lat: 51.5074, lng: -0.1278 },
+            'greater-manchester': { lat: 53.4808, lng: -2.2426 },
             'west-midlands': { lat: 52.4862, lng: -1.8904 },
             'west-yorkshire': { lat: 53.796, lng: -1.549 },
             'avon-and-somerset': { lat: 51.455, lng: -2.583 },
@@ -767,8 +871,8 @@
 
         // Quick areas with specific neighbourhood examples (for realistic demo)
         const QUICK_AREAS = {
-            'metropolitan-police-service': { neigh: 'westminster', name: 'Westminster, Metropolitan Police' },
-            'greater-manchester-police': { neigh: 'commercial-district', name: 'Commercial District, Greater Manchester Police' }
+            'metropolitan': { neigh: 'westminster', name: 'Westminster, Metropolitan Police' },
+            'greater-manchester': { neigh: 'commercial-district', name: 'Commercial District, Greater Manchester Police' }
         };
 
         // =============================================
@@ -957,9 +1061,8 @@
 
         async function loadAllForces() {
             try {
-                const res = await fetch('https://data.police.uk/api/forces');
-                if (!res.ok) throw new Error('Failed to load forces');
-                const forces = await res.json();
+                const forces = await getAllForces();
+                if (!forces.length) throw new Error('Failed to load forces');
                 
                 // Populate main dropdown
                 const select = document.getElementById('force-select');
@@ -1060,6 +1163,13 @@
         }
 
         async function showForceModal(forceId, forceName = null) {
+            const canonicalForceId = await resolveForceId(forceId);
+            if (!canonicalForceId) {
+                showToast('Could not resolve this police force. Please try manual selection.', 'danger');
+                return;
+            }
+            forceId = canonicalForceId;
+
             // Create or reuse modal for force + neigh selection
             let modal = document.getElementById('force-modal');
             if (!modal) {
@@ -1172,21 +1282,11 @@
                     throw new Error('Invalid postcode');
                 }
                 
-                const { latitude: lat, longitude: lng } = pcJson.result;
-                
-                // SAFE & FAST version (reverted from aggressive neighbourhood lookup to prevent breaking the flow)
-                // We always load the dashboard immediately so the user sees results.
-                // We use the closest known force for header/socials/overview.
-                // Full /team + /events + /priorities data requires an explicit neighbourhood selection
-                // (this is a limitation of the public data.police.uk API - there is no reliable public reverse geocode to neighbourhood).
-                const closestForce = findClosestForce(lat, lng);
+                const { latitude: lat, longitude: lng, pfa } = pcJson.result;
+                const resolved = await resolveAreaSelection(null, null, lat, lng, pfa || null);
                 const displayName = `Postcode ${pc}`;
-                
-                if (closestForce) {
-                    loadAreaDashboard(closestForce, null, lat, lng, displayName);
-                } else {
-                    loadAreaDashboard(null, null, lat, lng, displayName);
-                }
+
+                loadAreaDashboard(resolved.forceId, resolved.neighId, lat, lng, displayName);
                 
             } catch (err) {
                 console.error(err);
@@ -1204,38 +1304,43 @@
         }
 
         // Quick select cards handler
-        function selectQuickArea(forceId, neighId, lat, lng, displayName) {
-            loadAreaDashboard(forceId, neighId, lat, lng, displayName);
+        async function selectQuickArea(forceId, neighId, lat, lng, displayName) {
+            const resolved = await resolveAreaSelection(forceId, neighId, lat, lng);
+            loadAreaDashboard(resolved.forceId, resolved.neighId, lat, lng, displayName);
         }
 
         async function loadFromDropdown() {
             const forceId = document.getElementById('force-select').value;
-            const neighId = document.getElementById('neighbourhood-select').value;
+            const selectedNeighId = document.getElementById('neighbourhood-select').value;
             
             if (!forceId) {
                 showToast('Please select a police force first', 'danger');
                 return;
             }
             
-            const center = FORCE_CENTERS[forceId] || { lat: 52.5, lng: -1.5 };
+            const canonicalForceId = await resolveForceId(forceId);
+            const center = FORCE_CENTERS[canonicalForceId] || { lat: 52.5, lng: -1.5 };
             let displayName = document.getElementById('force-select').options[document.getElementById('force-select').selectedIndex].text;
-            
-            if (neighId) {
+
+            if (selectedNeighId) {
                 const neighName = document.getElementById('neighbourhood-select').options[document.getElementById('neighbourhood-select').selectedIndex].text;
                 displayName = `${neighName}, ${displayName}`;
             }
-            
-            loadAreaDashboard(forceId, neighId || null, center.lat, center.lng, displayName);
+
+            const resolved = await resolveAreaSelection(canonicalForceId, selectedNeighId || null, center.lat, center.lng);
+            loadAreaDashboard(resolved.forceId, resolved.neighId, center.lat, center.lng, displayName);
         }
 
         async function loadNeighbourhoods() {
-            const forceId = document.getElementById('force-select').value;
+            const selectedForceId = document.getElementById('force-select').value;
             const neighSelect = document.getElementById('neighbourhood-select');
             neighSelect.innerHTML = '<option value="">All / Select neighbourhood...</option>';
             
-            if (!forceId) return;
+            if (!selectedForceId) return;
             
             try {
+                const forceId = await resolveForceId(selectedForceId);
+                if (!forceId) throw new Error('Unknown force');
                 const res = await fetch(`https://data.police.uk/api/${forceId}/neighbourhoods`);
                 const data = await res.json();
                 data.forEach(n => {
@@ -1255,6 +1360,10 @@
         // Builds all tabs, charts, maps
         // =============================================
         async function loadAreaDashboard(forceId, neighId, lat, lng, displayName) {
+            const resolved = await resolveAreaSelection(forceId, neighId, lat, lng);
+            forceId = resolved.forceId;
+            neighId = resolved.neighId;
+
             // Show dashboard, hide landing
             document.getElementById('landing-view').classList.add('d-none');
             document.getElementById('dashboard-view').classList.remove('d-none');
@@ -2335,7 +2444,7 @@
             
             // Optional: Pre-select a popular area on very first load for demo (comment out in production)
             // setTimeout(() => {
-            //     selectQuickArea('greater-manchester-police', 'commercial-district', 53.4808, -2.2426, 'Commercial District, Greater Manchester Police');
+            //     selectQuickArea('greater-manchester', 'commercial-district', 53.4808, -2.2426, 'Commercial District, Greater Manchester Police');
             // }, 800);
             
             // Keyboard support for postcode
