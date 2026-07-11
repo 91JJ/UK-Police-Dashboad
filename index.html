@@ -893,6 +893,22 @@
             return closestId;
         }
 
+        function getSafeCoordinates(forceId, lat, lng) {
+            const parsedLat = Number.parseFloat(lat);
+            const parsedLng = Number.parseFloat(lng);
+            if (Number.isFinite(parsedLat) && Number.isFinite(parsedLng)) {
+                return { lat: parsedLat, lng: parsedLng };
+            }
+
+            const center = forceId && FORCE_CENTERS[forceId] ? FORCE_CENTERS[forceId] : null;
+            if (center) {
+                return { lat: center.lat, lng: center.lng };
+            }
+
+            // UK-wide fallback center to keep the map/data functional.
+            return { lat: 54.6, lng: -2.2 };
+        }
+
         // =============================================
         // NEW HELPER: Find best matching neighbourhood for a lat/lng within a force
         // This enables postcode searches to get full /team, /events, /priorities data
@@ -1282,7 +1298,10 @@
                     throw new Error('Invalid postcode');
                 }
                 
-                const { latitude: lat, longitude: lng, pfa } = pcJson.result;
+                const { latitude, longitude, pfa } = pcJson.result;
+                const baseCoords = getSafeCoordinates(null, latitude, longitude);
+                const lat = baseCoords.lat;
+                const lng = baseCoords.lng;
                 const resolved = await resolveAreaSelection(null, null, lat, lng, pfa || null);
                 const displayName = `Postcode ${pc}`;
 
@@ -1363,6 +1382,9 @@
             const resolved = await resolveAreaSelection(forceId, neighId, lat, lng);
             forceId = resolved.forceId;
             neighId = resolved.neighId;
+            const safeCoords = getSafeCoordinates(forceId, lat, lng);
+            lat = safeCoords.lat;
+            lng = safeCoords.lng;
 
             // Show dashboard, hide landing
             document.getElementById('landing-view').classList.add('d-none');
@@ -1493,6 +1515,10 @@
 
         async function loadCrimeDataAndStats(lat, lng) {
             try {
+                const safeCoords = getSafeCoordinates(currentForceId, lat, lng);
+                lat = safeCoords.lat;
+                lng = safeCoords.lng;
+
                 // Get last updated date for best month — use cachedFetch to avoid 429/CORS issues
                 let dateStr = '2025-04'; // fallback recent month
                 try {
@@ -1889,6 +1915,10 @@
         function initCrimeMap() {
             const mapContainer = document.getElementById('crime-map');
             if (!mapContainer) return;
+
+            const safeCoords = getSafeCoordinates(currentForceId, currentLat, currentLng);
+            currentLat = safeCoords.lat;
+            currentLng = safeCoords.lng;
             
             if (crimeMap) {
                 crimeMap.remove();
