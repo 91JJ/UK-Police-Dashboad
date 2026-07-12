@@ -436,6 +436,25 @@
                 </div>
             </div>
 
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body py-3">
+                    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+                        <div>
+                            <div class="fw-semibold">Date range</div>
+                            <div class="small text-muted">Choose how many recent months to include in crime totals and map data.</div>
+                        </div>
+                        <div class="w-100" style="max-width: 520px;">
+                            <div class="d-flex justify-content-between small text-muted mb-1">
+                                <span>1 month</span>
+                                <span id="date-range-label" class="fw-semibold text-primary">Last 3 months</span>
+                                <span>12 months</span>
+                            </div>
+                            <input id="date-range-slider" type="range" class="form-range" min="1" max="12" value="3" step="1">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Key Highlights / Stats Row (improved with more metrics) -->
             <div class="row g-3 mb-4" id="stats-row">
                 <!-- JS populates 4 stat cards here: Total crimes, Top crime, Team size, % change -->
@@ -708,6 +727,9 @@
         let crimeMarkers = [];         // For filtering on crime map
         let currentForceData = null;   // Cache force details (socials etc)
         let allForcesCache = null;
+        let currentDateRangeMonths = 3;
+        let currentMonthlySeries = [];
+        let crimeLegendControl = null;
 
         // Lightweight in-memory + localStorage cache to reduce 429 rate limits on data.police.uk
         const apiCache = new Map();
@@ -723,8 +745,60 @@
             'gmp': 'greater-manchester'
         };
 
+        const CATEGORY_COLORS = {
+            'anti-social-behaviour': '#ef4444',
+            'bicycle-theft': '#f59e0b',
+            'burglary': '#f97316',
+            'criminal-damage-arson': '#dc2626',
+            'drugs': '#8b5cf6',
+            'other-crime': '#64748b',
+            'other-theft': '#0ea5e9',
+            'possession-of-weapons': '#a855f7',
+            'public-order': '#d946ef',
+            'robbery': '#b91c1c',
+            'shoplifting': '#eab308',
+            'theft-from-the-person': '#06b6d4',
+            'vehicle-crime': '#3b82f6',
+            'violent-crime': '#be123c'
+        };
+
         function delay(ms) {
             return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        function formatMonthLabel(monthIso) {
+            const d = new Date(monthIso + '-01T00:00:00');
+            return d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+        }
+
+        function updateDateRangeLabel() {
+            const el = document.getElementById('date-range-label');
+            if (!el) return;
+            el.textContent = `Last ${currentDateRangeMonths} month${currentDateRangeMonths === 1 ? '' : 's'}`;
+        }
+
+        async function applyDateRangeFromSlider() {
+            const slider = document.getElementById('date-range-slider');
+            if (!slider) return;
+            currentDateRangeMonths = Math.max(1, Math.min(12, Number.parseInt(slider.value, 10) || 1));
+            updateDateRangeLabel();
+
+            if (currentAreaName) {
+                await refreshCurrentData();
+            }
+        }
+
+        function getCategoryColor(category) {
+            if (CATEGORY_COLORS[category]) return CATEGORY_COLORS[category];
+
+            const palette = ['#2563eb', '#16a34a', '#d97706', '#7c3aed', '#db2777', '#0891b2', '#4f46e5'];
+            const key = (category || 'other-crime').toString();
+            let hash = 0;
+            for (let i = 0; i < key.length; i++) {
+                hash = ((hash << 5) - hash) + key.charCodeAt(i);
+                hash |= 0;
+            }
+            return palette[Math.abs(hash) % palette.length];
         }
 
         async function fetchJsonWithRetry(url, options = {}, attempts = 3) {
@@ -1621,9 +1695,37 @@
 
                 // Start from latest known publication month and gracefully step back if rate-limited.
                 const latestMonth = await getLatestCrimeMonth();
-                const crimeResult = await fetchCrimesWithDateFallback(lat, lng, latestMonth, 3);
-                const dateStr = crimeResult.month;
-                currentCrimes = Array.isArray(crimeResult.crimes) ? crimeResult.crimes : [];
+                const monthsToLoad = Math.max(1, Math.min(12, currentDateRangeMonths));
+                currentMonthlySeries = [];
+                currentCrimes = [];
+
+                for (let i = 0; i < monthsToLoad; i++) {
+                    const d = new Date(latestMonth + '-01T00:00:00');
+                    d.setMonth(d.getMonth() - i);
+                    const monthIso = d.toISOString().substring(0, 7);
+                    const url = `https://data.police.uk/api/crimes-street/all-crime?lat=${lat}&lng=${lng}&date=${monthIso}`;
+                    const monthCrimes = await cachedFetch(url);
+                    const safeMonthCrimes = Array.isArray(monthCrimes) ? monthCrimes : [];
+                    currentMonthlySeries.unshift({ month: monthIso, count: safeMonthCrimes.length });
+                    currentCrimes.push(...safeMonthCrimes);
+                }
+
+                const currentWindowTotal = currentCrimes.length;
+                const previousWindowMonths = [];
+                let previousWindowTotal = 0;
+
+                for (let i = monthsToLoad; i < monthsToLoad * 2; i++) {
+                    const d = new Date(latestMonth + '-01T00:00:00');
+                    d.setMonth(d.getMonth() - i);
+                    const monthIso = d.toISOString().substring(0, 7);
+                    previousWindowMonths.push(monthIso);
+                }
+
+                for (const monthIso of previousWindowMonths) {
+                    const prevUrl = `https://data.police.uk/api/crimes-street/all-crime?lat=${lat}&lng=${lng}&date=${monthIso}`;
+                    const prevCrimesData = await cachedFetch(prevUrl);
+                    previousWindowTotal += Array.isArray(prevCrimesData) ? prevCrimesData.length : 0;
+                }
 
                 // Secondary refinement (kept for robustness): if specific neigh selected, nudge center to first crime loc.
                 // NOTE: Primary fix is now in loadAreaDashboard (neigh .centre override before crime fetch),
@@ -1647,23 +1749,15 @@
                 const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
                 const topCrime = sorted.length > 0 ? sorted[0][0].replace(/-/g, ' ') : '—';
                 
-                // Simple previous month comparison (demo - one month back) — use cache
+                // Compare selected range vs immediately previous range of equal size.
                 let changePct = null;
-                try {
-                    const prevDate = new Date(dateStr + '-01');
-                    prevDate.setMonth(prevDate.getMonth() - 1);
-                    const prevStr = prevDate.toISOString().substring(0, 7);
-                    const prevUrl = `https://data.police.uk/api/crimes-street/all-crime?lat=${lat}&lng=${lng}&date=${prevStr}`;
-                    const prevCrimesData = await cachedFetch(prevUrl);
-                    const prevCrimes = Array.isArray(prevCrimesData) ? prevCrimesData : [];
-                    if (prevCrimes.length > 0) {
-                        const pct = ((total - prevCrimes.length) / prevCrimes.length * 100);
-                        changePct = Math.round(pct);
-                    }
-                } catch (_) {}
+                if (previousWindowTotal > 0) {
+                    const pct = ((currentWindowTotal - previousWindowTotal) / previousWindowTotal * 100);
+                    changePct = Math.round(pct);
+                }
                 
                 // Render stats cards
-                renderStatsCards(total, topCrime, changePct);
+                renderStatsCards(total, topCrime, changePct, monthsToLoad);
                 
                 // Also populate category filter for crime map
                 populateCategoryFilter(counts);
@@ -1674,12 +1768,12 @@
             }
         }
 
-        function renderStatsCards(total, topCrime, changePct) {
+        function renderStatsCards(total, topCrime, changePct, rangeMonths = 1) {
             const container = document.getElementById('stats-row');
             container.innerHTML = `
                 <div class="col-6 col-md-3">
                     <div class="stat-card text-center h-100">
-                        <div class="text-muted small">Total crimes (last month)</div>
+                        <div class="text-muted small">Total crimes (${rangeMonths === 1 ? 'last month' : `last ${rangeMonths} months`})</div>
                         <div class="big-number">${total}</div>
                         <div class="small text-muted">Street-level incidents</div>
                     </div>
@@ -1693,7 +1787,7 @@
                 </div>
                 <div class="col-6 col-md-3">
                     <div class="stat-card text-center h-100">
-                        <div class="text-muted small">Change vs previous month</div>
+                        <div class="text-muted small">Change vs previous ${rangeMonths === 1 ? 'month' : `${rangeMonths} months`}</div>
                         <div class="big-number ${changePct !== null ? (changePct >= 0 ? 'text-success' : 'text-danger') : ''}">
                             ${changePct !== null ? (changePct >= 0 ? '+' : '') + changePct + '%' : '—'}
                         </div>
@@ -2069,12 +2163,20 @@
                 const lng = parseFloat(crime.location.longitude);
                 if (isNaN(lat) || isNaN(lng)) return;
                 
-                const marker = L.marker([lat, lng]);
+                const categoryColor = getCategoryColor(crime.category);
+                const marker = L.circleMarker([lat, lng], {
+                    radius: 6,
+                    color: categoryColor,
+                    fillColor: categoryColor,
+                    fillOpacity: 0.75,
+                    weight: 1
+                });
                 
                 // Rich popup + click to open detailed modal (matches police.uk behaviour)
                 const popupHtml = `
                     <div style="min-width:180px">
                         <strong>${(crime.category || '').replace(/-/g, ' ')}</strong><br>
+                        <span class="badge" style="background:${categoryColor}; color:#fff;">Category color</span><br>
                         <small class="text-muted">${crime.location.street ? crime.location.street.name : 'Unknown location'}</small><br>
                         <span class="badge bg-secondary mt-1 mb-2">${crime.outcome_status ? crime.outcome_status.category : 'Under investigation'}</span><br>
                         <button class="btn btn-sm btn-outline-primary w-100 mt-1" onclick="showCrimeDetailModal(${JSON.stringify(crime).replace(/"/g, '&quot;')})">
@@ -2095,6 +2197,42 @@
                 marker.addTo(crimeMap);
                 crimeMarkers.push(marker);
             });
+
+            renderCrimeLegend(crimesToShow);
+        }
+
+        function renderCrimeLegend(crimes) {
+            if (!crimeMap) return;
+
+            if (crimeLegendControl) {
+                crimeMap.removeControl(crimeLegendControl);
+                crimeLegendControl = null;
+            }
+
+            const counts = {};
+            (crimes || []).forEach(c => {
+                if (!c || !c.category) return;
+                counts[c.category] = (counts[c.category] || 0) + 1;
+            });
+
+            const topCategories = Object.entries(counts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 6);
+
+            if (!topCategories.length) return;
+
+            crimeLegendControl = L.control({ position: 'bottomright' });
+            crimeLegendControl.onAdd = function () {
+                const div = L.DomUtil.create('div', 'p-2 bg-white border rounded shadow-sm');
+                div.style.minWidth = '180px';
+                div.style.fontSize = '12px';
+                div.innerHTML = '<strong>Crime categories</strong><br>' + topCategories.map(([cat, count]) => {
+                    const color = getCategoryColor(cat);
+                    return `<div style="display:flex;align-items:center;gap:6px;margin-top:4px;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:${color};"></span><span>${cat.replace(/-/g, ' ')} (${count})</span></div>`;
+                }).join('');
+                return div;
+            };
+            crimeLegendControl.addTo(crimeMap);
         }
 
         // New lightweight modal for crime outcome/details (tread lightly addition)
@@ -2208,8 +2346,10 @@
             const counts = {};
             currentCrimes.forEach(c => counts[c.category] = (counts[c.category]||0) + 1);
             
-            const labels = Object.keys(counts).map(l => l.replace(/-/g, ' '));
-            const data = Object.values(counts);
+            const categories = Object.keys(counts);
+            const labels = categories.map(l => l.replace(/-/g, ' '));
+            const data = categories.map(c => counts[c]);
+            const colors = categories.map(c => getCategoryColor(c));
             
             categoryChart = new Chart(ctx, {
                 type: 'bar',
@@ -2218,8 +2358,8 @@
                     datasets: [{
                         label: 'Number of crimes',
                         data: data,
-                        backgroundColor: '#003087',
-                        borderColor: '#00a3e0',
+                        backgroundColor: colors,
+                        borderColor: colors,
                         borderWidth: 1
                     }]
                 },
@@ -2539,6 +2679,7 @@
             
             // Cleanup maps/charts to free memory
             if (crimeMap) { crimeMap.remove(); crimeMap = null; }
+            crimeLegendControl = null;
             if (categoryChart) { categoryChart.destroy(); categoryChart = null; }
             if (trendChart) { trendChart.destroy(); trendChart = null; }
             
@@ -2555,6 +2696,17 @@
         // =============================================
         async function initializeApp() {
             console.log('%c[UK Police Dashboard] Initializing improved version...', 'color:#003087');
+
+            const rangeSlider = document.getElementById('date-range-slider');
+            if (rangeSlider) {
+                rangeSlider.value = String(currentDateRangeMonths);
+                rangeSlider.addEventListener('input', () => {
+                    currentDateRangeMonths = Math.max(1, Math.min(12, Number.parseInt(rangeSlider.value, 10) || 1));
+                    updateDateRangeLabel();
+                });
+                rangeSlider.addEventListener('change', applyDateRangeFromSlider);
+                updateDateRangeLabel();
+            }
             
             // Initialize landing page (forces list + map)
             await initLanding();
