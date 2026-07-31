@@ -861,6 +861,23 @@
             return [];
         }
 
+        function normalizeEventsPayload(payload) {
+            if (!payload) return [];
+            if (Array.isArray(payload)) return payload;
+
+            if (typeof payload === 'object') {
+                if (Array.isArray(payload.events)) return payload.events;
+                if (Array.isArray(payload.results)) return payload.results;
+                if (Array.isArray(payload.items)) return payload.items;
+
+                if (payload.title || payload.description || payload.start_date || payload.end_date || payload.address) {
+                    return [payload];
+                }
+            }
+
+            return [];
+        }
+
         function updateDateRangeLabel() {
             const el = document.getElementById('date-range-label');
             if (!el) return;
@@ -2011,7 +2028,7 @@
 
                     team = people.length ? people : legacyTeam;
                 }
-                const events = (eventsRes.status === 'fulfilled' && Array.isArray(eventsRes.value)) ? eventsRes.value : [];
+                const events = (eventsRes.status === 'fulfilled') ? normalizeEventsPayload(eventsRes.value) : [];
                 const priorities = (prioritiesRes.status === 'fulfilled' && Array.isArray(prioritiesRes.value)) ? prioritiesRes.value : [];
 
                 currentTeamMembers = team;
