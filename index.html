@@ -2070,11 +2070,19 @@
                 if (priorities.length > 0) {
                     let prioHTML = `<div class="col-12 mt-3"><h6 class="fw-semibold">Current Policing Priorities</h6></div>`;
                     priorities.slice(0, 3).forEach(p => {
+                        const issueDate = p.issue_date ? formatDateDisplay(p.issue_date) : '';
+                        const actionDate = p.action_date ? formatDateDisplay(p.action_date) : '';
                         prioHTML += `
                             <div class="col-12 col-md-6">
                                 <div class="card card-body small mb-2">
                                     <strong>${p.issue || 'Priority'}</strong><br>
                                     <span class="text-muted">${p.action || p.description || ''}</span>
+                                    ${(issueDate || actionDate) ? `
+                                        <div class="mt-2 text-muted" style="font-size:0.78rem;">
+                                            ${issueDate ? `<div><strong>Issue date:</strong> ${escapeHtml(issueDate)}</div>` : ''}
+                                            ${actionDate ? `<div><strong>Action date:</strong> ${escapeHtml(actionDate)}</div>` : ''}
+                                        </div>
+                                    ` : ''}
                                 </div>
                             </div>
                         `;
