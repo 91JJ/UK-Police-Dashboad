@@ -844,6 +844,23 @@
                 .join(', ');
         }
 
+        function normalizePeoplePayload(payload) {
+            if (!payload) return [];
+            if (Array.isArray(payload)) return payload;
+
+            if (typeof payload === 'object') {
+                if (Array.isArray(payload.people)) return payload.people;
+                if (Array.isArray(payload.members)) return payload.members;
+                if (Array.isArray(payload.officers)) return payload.officers;
+
+                if (payload.name || payload.rank || payload.neighbourhood_role || payload.bio || payload.biography || payload.description) {
+                    return [payload];
+                }
+            }
+
+            return [];
+        }
+
         function updateDateRangeLabel() {
             const el = document.getElementById('date-range-label');
             if (!el) return;
@@ -1985,11 +2002,11 @@
                     const peopleResult = teamRes.value[0];
                     const legacyTeamResult = teamRes.value[1];
 
-                    const people = (peopleResult && peopleResult.status === 'fulfilled' && Array.isArray(peopleResult.value))
-                        ? peopleResult.value
+                    const people = (peopleResult && peopleResult.status === 'fulfilled')
+                        ? normalizePeoplePayload(peopleResult.value)
                         : [];
-                    const legacyTeam = (legacyTeamResult && legacyTeamResult.status === 'fulfilled' && Array.isArray(legacyTeamResult.value))
-                        ? legacyTeamResult.value
+                    const legacyTeam = (legacyTeamResult && legacyTeamResult.status === 'fulfilled')
+                        ? normalizePeoplePayload(legacyTeamResult.value)
                         : [];
 
                     team = people.length ? people : legacyTeam;
