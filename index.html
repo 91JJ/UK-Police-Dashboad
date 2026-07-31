@@ -549,7 +549,7 @@
                         <!-- Trend over time -->
                         <div class="col-lg-6">
                             <div class="card h-100">
-                                <div class="card-header bg-white"><strong>Monthly crime trend (last 6 months)</strong></div>
+                                <div class="card-header bg-white"><strong id="trend-chart-title">Monthly crime trend (last 3 months)</strong></div>
                                 <div class="card-body">
                                     <div class="chart-container"><canvas id="trend-chart"></canvas></div>
                                 </div>
@@ -603,7 +603,7 @@
                     <div class="alert alert-light small mb-3">
                         <i class="bi bi-info-circle me-1"></i> 
                         <strong>Your Local Team</strong> — Neighbourhood policing team, upcoming events and current priorities 
-                        (sourced from the official <code>/team</code>, <code>/events</code> and <code>/priorities</code> endpoints where available).
+                        (sourced from the official <code>/people</code>, <code>/events</code> and <code>/priorities</code> endpoints where available).
                     </div>
                     <div id="team-grid" class="row g-3">
                         <!-- Officer cards populated dynamically -->
@@ -775,6 +775,11 @@
             const el = document.getElementById('date-range-label');
             if (!el) return;
             el.textContent = `Last ${currentDateRangeMonths} month${currentDateRangeMonths === 1 ? '' : 's'}`;
+
+            const trendTitleEl = document.getElementById('trend-chart-title');
+            if (trendTitleEl) {
+                trendTitleEl.textContent = `Monthly crime trend (last ${currentDateRangeMonths} month${currentDateRangeMonths === 1 ? '' : 's'})`;
+            }
         }
 
         async function applyDateRangeFromSlider() {
@@ -1893,14 +1898,31 @@
             grid.innerHTML = `<div class="col-12 text-center py-3"><div class="loading-spinner mx-auto"></div><div class="small text-muted mt-2">Loading local policing team, events &amp; priorities...</div></div>`;
             
             try {
-                // Fetch team + events + priorities in parallel (like in HA integration)
+                // /people is the primary endpoint for neighbourhood officers.
+                // Keep /team as a compatibility fallback for any legacy responses.
                 const [teamRes, eventsRes, prioritiesRes] = await Promise.allSettled([
-                    cachedFetch(`https://data.police.uk/api/${forceId}/${neighId}/team`),
+                    Promise.allSettled([
+                        cachedFetch(`https://data.police.uk/api/${forceId}/${neighId}/people`),
+                        cachedFetch(`https://data.police.uk/api/${forceId}/${neighId}/team`)
+                    ]),
                     cachedFetch(`https://data.police.uk/api/${forceId}/${neighId}/events`),
                     cachedFetch(`https://data.police.uk/api/${forceId}/${neighId}/priorities`)
                 ]);
 
-                const team = (teamRes.status === 'fulfilled' && Array.isArray(teamRes.value)) ? teamRes.value : [];
+                let team = [];
+                if (teamRes.status === 'fulfilled' && Array.isArray(teamRes.value)) {
+                    const peopleResult = teamRes.value[0];
+                    const legacyTeamResult = teamRes.value[1];
+
+                    const people = (peopleResult && peopleResult.status === 'fulfilled' && Array.isArray(peopleResult.value))
+                        ? peopleResult.value
+                        : [];
+                    const legacyTeam = (legacyTeamResult && legacyTeamResult.status === 'fulfilled' && Array.isArray(legacyTeamResult.value))
+                        ? legacyTeamResult.value
+                        : [];
+
+                    team = people.length ? people : legacyTeam;
+                }
                 const events = (eventsRes.status === 'fulfilled' && Array.isArray(eventsRes.value)) ? eventsRes.value : [];
                 const priorities = (prioritiesRes.status === 'fulfilled' && Array.isArray(prioritiesRes.value)) ? prioritiesRes.value : [];
 
@@ -2378,30 +2400,13 @@
             if (!ctx || !currentForceId && !currentLat) return;
             
             if (trendChart) trendChart.destroy();
-            
-            const months = [];
-            const counts = [];
-            const today = new Date();
-            
-            // Fetch last 4 months to reduce API burst pressure.
-            for (let i = 3; i >= 0; i--) {
-                const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-                const dateStr = d.toISOString().substring(0, 7);
-                months.push(d.toLocaleString('default', { month: 'short' }) + ' ' + d.getFullYear());
-                
-                try {
-                    let url;
-                    if (currentForceId) {
-                        url = `https://data.police.uk/api/crimes-street/all-crime?lat=${currentLat}&lng=${currentLng}&date=${dateStr}`;
-                    } else {
-                        url = `https://data.police.uk/api/crimes-street/all-crime?lat=${currentLat}&lng=${currentLng}&date=${dateStr}`;
-                    }
-                    const data = await cachedFetch(url);
-                    counts.push(Array.isArray(data) ? data.length : 0);
-                } catch (_) {
-                    counts.push(0);
-                }
-            }
+
+            // Keep trend chart aligned with the active date-range slider selection.
+            const series = Array.isArray(currentMonthlySeries) ? currentMonthlySeries : [];
+            const months = series.map(item => formatMonthLabel(item.month));
+            const counts = series.map(item => item.count || 0);
+
+            if (!months.length) return;
             
             trendChart = new Chart(ctx, {
                 type: 'line',
