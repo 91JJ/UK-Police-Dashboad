@@ -782,6 +782,33 @@
                 .replace(/'/g, '&#39;');
         }
 
+        function sanitizeApiHtml(value) {
+            if (!value) return '';
+
+            const template = document.createElement('template');
+            template.innerHTML = String(value);
+
+            template.content.querySelectorAll('script, style, iframe, object, embed').forEach(el => el.remove());
+
+            template.content.querySelectorAll('*').forEach(el => {
+                Array.from(el.attributes).forEach(attr => {
+                    const name = attr.name.toLowerCase();
+                    const attrValue = (attr.value || '').trim();
+
+                    if (name.startsWith('on')) {
+                        el.removeAttribute(attr.name);
+                        return;
+                    }
+
+                    if ((name === 'href' || name === 'src') && /^javascript:/i.test(attrValue)) {
+                        el.removeAttribute(attr.name);
+                    }
+                });
+            });
+
+            return template.innerHTML;
+        }
+
         function formatDateDisplay(dateValue) {
             if (!dateValue) return '';
             const parsed = new Date(dateValue);
@@ -2077,6 +2104,7 @@
             const name = member.name || 'Team Member';
             const rank = member.rank || member.neighbourhood_role || '';
             const bio = member.bio || member.biography || member.description || '';
+            const bioHtml = sanitizeApiHtml(bio);
             const contactDetails = member.contact_details || {};
             const contactItems = [];
 
@@ -2105,7 +2133,7 @@
                             </div>
                             <div class="modal-body">
                                 ${rank ? `<p><strong>Role:</strong> ${escapeHtml(rank)}</p>` : ''}
-                                ${bio ? `<p class="small mb-3">${escapeHtml(bio)}</p>` : ''}
+                                ${bioHtml ? `<div class="small mb-3">${bioHtml}</div>` : ''}
                                 ${contactItems.length ? `<h6 class="small text-uppercase text-muted mb-2">Contact details</h6><ul class="small mb-3 ps-3">${contactItems.join('')}</ul>` : ''}
                                 ${extraDetails ? `<h6 class="small text-uppercase text-muted mb-2">Additional details</h6><ul class="small mb-0 ps-3">${extraDetails}</ul>` : ''}
                                 ${!rank && !bio && !contactItems.length && !extraDetails ? '<p class="small text-muted mb-0">No additional profile details were provided by the open data feed for this officer.</p>' : ''}
@@ -2135,6 +2163,7 @@
             const dateRange = formatEventDateRange(eventItem) || 'Date to be confirmed';
             const location = formatEventAddress(eventItem.address) || 'Location to be confirmed';
             const description = eventItem.description || 'No further details available from the open data feed.';
+            const descriptionHtml = sanitizeApiHtml(description);
             const type = eventItem.type || '';
             const contact = eventItem.contact_details || {};
 
@@ -2160,7 +2189,7 @@
                                 <p class="mb-1"><strong>Date:</strong> ${escapeHtml(dateRange)}</p>
                                 <p class="mb-2"><strong>Location:</strong> ${escapeHtml(location)}</p>
                                 <hr>
-                                <p class="small">${escapeHtml(description)}</p>
+                                <div class="small">${descriptionHtml}</div>
                                 ${contactHtml}
                             </div>
                             <div class="modal-footer">
