@@ -878,6 +878,23 @@
             return [];
         }
 
+        function normalizePrioritiesPayload(payload) {
+            if (!payload) return [];
+            if (Array.isArray(payload)) return payload;
+
+            if (typeof payload === 'object') {
+                if (Array.isArray(payload.priorities)) return payload.priorities;
+                if (Array.isArray(payload.results)) return payload.results;
+                if (Array.isArray(payload.items)) return payload.items;
+
+                if (payload.issue || payload.action || payload.description || payload.issue_date || payload.action_date || payload['issue-date'] || payload['action-date']) {
+                    return [payload];
+                }
+            }
+
+            return [];
+        }
+
         function updateDateRangeLabel() {
             const el = document.getElementById('date-range-label');
             if (!el) return;
@@ -2003,33 +2020,24 @@
             grid.innerHTML = `<div class="col-12 text-center py-3"><div class="loading-spinner mx-auto"></div><div class="small text-muted mt-2">Loading local policing team, events &amp; priorities...</div></div>`;
             
             try {
-                // /people is the primary endpoint for neighbourhood officers.
-                // Keep /team as a compatibility fallback for any legacy responses.
-                const [teamRes, eventsRes, prioritiesRes] = await Promise.allSettled([
-                    Promise.allSettled([
-                        cachedFetch(`https://data.police.uk/api/${forceId}/${neighId}/people`),
-                        cachedFetch(`https://data.police.uk/api/${forceId}/${neighId}/team`)
-                    ]),
-                    cachedFetch(`https://data.police.uk/api/${forceId}/${neighId}/events`),
+                // Prefer /people; fetch /team only when needed as fallback.
+                const [people, events, priorities] = await Promise.all([
+                    cachedFetch(`https://data.police.uk/api/${forceId}/${neighId}/people`)
+                        .then(normalizePeoplePayload)
+                        .catch(() => []),
+                    cachedFetch(`https://data.police.uk/api/${forceId}/${neighId}/events`)
+                        .then(normalizeEventsPayload)
+                        .catch(() => []),
                     cachedFetch(`https://data.police.uk/api/${forceId}/${neighId}/priorities`)
+                        .then(normalizePrioritiesPayload)
+                        .catch(() => [])
                 ]);
 
-                let team = [];
-                if (teamRes.status === 'fulfilled' && Array.isArray(teamRes.value)) {
-                    const peopleResult = teamRes.value[0];
-                    const legacyTeamResult = teamRes.value[1];
-
-                    const people = (peopleResult && peopleResult.status === 'fulfilled')
-                        ? normalizePeoplePayload(peopleResult.value)
-                        : [];
-                    const legacyTeam = (legacyTeamResult && legacyTeamResult.status === 'fulfilled')
-                        ? normalizePeoplePayload(legacyTeamResult.value)
-                        : [];
-
-                    team = people.length ? people : legacyTeam;
+                let team = people;
+                if (team.length === 0) {
+                    const legacyTeamRaw = await cachedFetch(`https://data.police.uk/api/${forceId}/${neighId}/team`);
+                    team = normalizePeoplePayload(legacyTeamRaw);
                 }
-                const events = (eventsRes.status === 'fulfilled') ? normalizeEventsPayload(eventsRes.value) : [];
-                const priorities = (prioritiesRes.status === 'fulfilled' && Array.isArray(prioritiesRes.value)) ? prioritiesRes.value : [];
 
                 currentTeamMembers = team;
                 currentTeamEvents = events;
@@ -2070,13 +2078,15 @@
                 if (priorities.length > 0) {
                     let prioHTML = `<div class="col-12 mt-3"><h6 class="fw-semibold">Current Policing Priorities</h6></div>`;
                     priorities.slice(0, 3).forEach(p => {
-                        const issueDate = p.issue_date ? formatDateDisplay(p.issue_date) : '';
-                        const actionDate = p.action_date ? formatDateDisplay(p.action_date) : '';
+                        const issueDateRaw = p.issue_date || p['issue-date'] || p.issueDate || '';
+                        const actionDateRaw = p.action_date || p['action-date'] || p.actionDate || '';
+                        const issueDate = issueDateRaw ? formatDateDisplay(issueDateRaw) : '';
+                        const actionDate = actionDateRaw ? formatDateDisplay(actionDateRaw) : '';
                         prioHTML += `
                             <div class="col-12 col-md-6">
                                 <div class="card card-body small mb-2">
-                                    <strong>${p.issue || 'Priority'}</strong><br>
-                                    <span class="text-muted">${p.action || p.description || ''}</span>
+                                    <strong>${escapeHtml(p.issue || p.title || 'Priority')}</strong><br>
+                                    <span class="text-muted">${escapeHtml(p.action || p.description || p.details || '')}</span>
                                     ${(issueDate || actionDate) ? `
                                         <div class="mt-2 text-muted" style="font-size:0.78rem;">
                                             ${issueDate ? `<div><strong>Issue date:</strong> ${escapeHtml(issueDate)}</div>` : ''}
