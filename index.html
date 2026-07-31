@@ -2078,6 +2078,10 @@
                 if (priorities.length > 0) {
                     let prioHTML = `<div class="col-12 mt-3"><h6 class="fw-semibold">Current Policing Priorities</h6></div>`;
                     priorities.slice(0, 3).forEach(p => {
+                        const issueRaw = p.issue || p.title || 'Priority';
+                        const actionRaw = p.action || p.description || p.details || '';
+                        const issueHtml = sanitizeApiHtml(issueRaw);
+                        const actionHtml = sanitizeApiHtml(actionRaw);
                         const issueDateRaw = p.issue_date || p['issue-date'] || p.issueDate || '';
                         const actionDateRaw = p.action_date || p['action-date'] || p.actionDate || '';
                         const issueDate = issueDateRaw ? formatDateDisplay(issueDateRaw) : '';
@@ -2085,8 +2089,8 @@
                         prioHTML += `
                             <div class="col-12 col-md-6">
                                 <div class="card card-body small mb-2">
-                                    <strong>${escapeHtml(p.issue || p.title || 'Priority')}</strong><br>
-                                    <span class="text-muted">${escapeHtml(p.action || p.description || p.details || '')}</span>
+                                    <div class="mb-2">${issueHtml || `<strong>${escapeHtml(issueRaw)}</strong>`}</div>
+                                    ${actionHtml ? `<div class="text-muted">${actionHtml}</div>` : ''}
                                     ${(issueDate || actionDate) ? `
                                         <div class="mt-2 text-muted" style="font-size:0.78rem;">
                                             ${issueDate ? `<div><strong>Issue date:</strong> ${escapeHtml(issueDate)}</div>` : ''}
