@@ -730,6 +730,8 @@
         let currentDateRangeMonths = 3;
         let currentMonthlySeries = [];
         let crimeLegendControl = null;
+        let currentTeamMembers = [];
+        let currentTeamEvents = [];
 
         // Lightweight in-memory + localStorage cache to reduce 429 rate limits on data.police.uk
         const apiCache = new Map();
@@ -769,6 +771,50 @@
         function formatMonthLabel(monthIso) {
             const d = new Date(monthIso + '-01T00:00:00');
             return d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+        }
+
+        function escapeHtml(value) {
+            return (value ?? '').toString()
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function formatDateDisplay(dateValue) {
+            if (!dateValue) return '';
+            const parsed = new Date(dateValue);
+            if (Number.isNaN(parsed.getTime())) return dateValue;
+            return parsed.toLocaleString('en-GB', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        function formatEventDateRange(eventItem) {
+            const start = formatDateDisplay(eventItem.start_date);
+            const end = formatDateDisplay(eventItem.end_date);
+            if (start && end) return `${start} - ${end}`;
+            return start || end || '';
+        }
+
+        function formatEventAddress(address) {
+            if (!address) return '';
+            if (typeof address === 'string') return address;
+
+            const parts = [];
+            ['street', 'town', 'postcode', 'county'].forEach(key => {
+                if (address[key]) parts.push(address[key]);
+            });
+            if (parts.length) return parts.join(', ');
+
+            return Object.values(address)
+                .filter(v => typeof v === 'string' && v.trim())
+                .join(', ');
         }
 
         function updateDateRangeLabel() {
@@ -1088,7 +1134,7 @@
 
         // =============================================
         // NEW HELPER: Find best matching neighbourhood for a lat/lng within a force
-        // This enables postcode searches to get full /team, /events, /priorities data
+        // This enables postcode searches to get full /people, /events, /priorities data
         // for maximum consistency across all selection methods.
         // =============================================
         async function findBestNeighbourhood(forceId, targetLat, targetLng) {
@@ -1101,8 +1147,8 @@
                 let bestMatch = null;
                 let bestDistance = Infinity;
 
-                // Keep resolver light to avoid API rate limits during postcode lookups.
-                const candidates = neighList.slice(0, 12);
+                // Use a broader candidate set to improve nearest-neighbourhood accuracy.
+                const candidates = neighList.slice(0, 60);
 
                 // Fetch details in parallel (cachedFetch helps a lot on repeat visits)
                 const detailPromises = candidates.map(async (n) => {
@@ -1402,9 +1448,8 @@
             
             // Fetch force details for description + socials preview
             try {
-                const forceRes = await fetch(`https://data.police.uk/api/forces/${forceId}`);
-                if (forceRes.ok) {
-                    const fData = await forceRes.json();
+                const fData = await cachedFetch(`https://data.police.uk/api/forces/${forceId}`);
+                if (fData) {
                     descEl.innerHTML = fData.description ? fData.description.substring(0, 220) + '...' : 'Official police force data.';
                     currentForceData = fData; // cache
                 } else {
@@ -1419,8 +1464,8 @@
             goBtn.disabled = true;
             
             try {
-                const neighRes = await fetch(`https://data.police.uk/api/${forceId}/neighbourhoods`);
-                const neighs = await neighRes.json();
+                const neighs = await cachedFetch(`https://data.police.uk/api/${forceId}/neighbourhoods`);
+                if (!Array.isArray(neighs)) throw new Error('No neighbourhood data');
                 
                 neighSelect.innerHTML = '<option value="">Select a neighbourhood...</option>';
                 neighs.forEach(n => {
@@ -1468,10 +1513,9 @@
             
             try {
                 // Step 1: Get lat/lng from postcodes.io (reliable UK postcode API)
-                const pcRes = await fetch(`https://api.postcodes.io/postcodes/${pc}`);
-                const pcJson = await pcRes.json();
+                const pcJson = await fetchJsonWithRetry(`https://api.postcodes.io/postcodes/${pc}`);
                 
-                if (pcJson.status !== 200 || !pcJson.result) {
+                if (!pcJson || pcJson.status !== 200 || !pcJson.result) {
                     throw new Error('Invalid postcode');
                 }
                 
@@ -1536,8 +1580,8 @@
             try {
                 const forceId = await resolveForceId(selectedForceId);
                 if (!forceId) throw new Error('Unknown force');
-                const res = await fetch(`https://data.police.uk/api/${forceId}/neighbourhoods`);
-                const data = await res.json();
+                const data = await cachedFetch(`https://data.police.uk/api/${forceId}/neighbourhoods`);
+                if (!Array.isArray(data)) throw new Error('No neighbourhood data');
                 data.forEach(n => {
                     const opt = document.createElement('option');
                     opt.value = n.id;
@@ -1598,9 +1642,9 @@
             // 1. Fetch force details (for socials, contact, description)
             if (forceId) {
                 try {
-                    const fRes = await fetch(`https://data.police.uk/api/forces/${forceId}`);
-                    if (fRes.ok) {
-                        currentForceData = await fRes.json();
+                    const fData = await cachedFetch(`https://data.police.uk/api/forces/${forceId}`);
+                    if (fData) {
+                        currentForceData = fData;
                         renderSocialAndContact(currentForceData);
                         
                         // FIX: Update header with official force name (instead of raw ID slug) for better UX
@@ -1617,8 +1661,8 @@
             let neighData = null;
             if (forceId && neighId) {
                 try {
-                    const nRes = await fetch(`https://data.police.uk/api/${forceId}/${neighId}`);
-                    if (nRes.ok) neighData = await nRes.json();
+                    const nData = await cachedFetch(`https://data.police.uk/api/${forceId}/${neighId}`);
+                    if (nData) neighData = nData;
                 } catch (e) { /* optional */ }
             }
             
@@ -1926,19 +1970,22 @@
                 const events = (eventsRes.status === 'fulfilled' && Array.isArray(eventsRes.value)) ? eventsRes.value : [];
                 const priorities = (prioritiesRes.status === 'fulfilled' && Array.isArray(prioritiesRes.value)) ? prioritiesRes.value : [];
 
+                currentTeamMembers = team;
+                currentTeamEvents = events;
+
                 grid.innerHTML = '';
 
                 // === Officers ===
                 if (team.length > 0) {
-                    const officersHTML = team.map(member => {
+                    const officersHTML = team.map((member, index) => {
                         const initials = (member.name || 'Officer').split(' ').map(n => n[0]).join('').substring(0,2).toUpperCase();
                         return `
                             <div class="col-6 col-md-4 col-lg-3">
                                 <div class="officer-card h-100">
                                     <div class="officer-avatar">${initials}</div>
-                                    <h6 class="mb-1 fw-semibold">${member.name || 'Team Member'}</h6>
-                                    <div class="text-primary small fw-medium">${member.rank || member.neighbourhood_role || 'Police Officer'}</div>
-                                    <button class="btn btn-sm btn-outline-primary mt-2 w-100" onclick="showOfficerModal('${(member.name || 'Officer').replace(/'/g, "\\'")}', '${(member.rank || '').replace(/'/g, "\\'")}')">
+                                    <h6 class="mb-1 fw-semibold">${escapeHtml(member.name || 'Team Member')}</h6>
+                                    <div class="text-primary small fw-medium">${escapeHtml(member.rank || member.neighbourhood_role || 'Police Officer')}</div>
+                                    <button class="btn btn-sm btn-outline-primary mt-2 w-100" onclick="showOfficerModalByIndex(${index})">
                                         View profile
                                     </button>
                                 </div>
@@ -1977,19 +2024,20 @@
                 // === Events / Meetings ===
                 if (events.length > 0) {
                     let eventHTML = `<div class="col-12 mt-3"><h6 class="fw-semibold">Upcoming Events &amp; Meetings <span class="text-muted small">(click for details)</span></h6></div>`;
-                    events.slice(0, 4).forEach(ev => {
-                        const date = ev.date || '';
-                        const title = (ev.title || 'Event').replace(/'/g, "\\'");
-                        const location = (ev.location || '').replace(/'/g, "\\'");
-                        const description = (ev.description || ev.details || 'No further details available from the open data feed.').replace(/'/g, "\\'");
+                    events.slice(0, 4).forEach((ev, index) => {
+                        const date = formatEventDateRange(ev) || 'Date to be confirmed';
+                        const location = formatEventAddress(ev.address) || 'Location to be confirmed';
+                        const type = ev.type || 'Event';
+                        const title = ev.title || 'Event';
                         
                         eventHTML += `
                             <div class="col-12 col-md-6">
                                 <div class="card card-body small mb-2 event-card" 
                                      style="cursor: pointer; transition: all 0.2s;"
-                                     onclick="showEventModal('${title}', '${date}', '${location}', '${description}')">
-                                    <strong>${ev.title || 'Event'}</strong><br>
-                                    <span class="text-muted">${date} ${ev.location ? '• ' + ev.location : ''}</span>
+                                     onclick="showEventModalByIndex(${index})">
+                                    <strong>${escapeHtml(title)}</strong><br>
+                                    <span class="text-muted">${escapeHtml(date)}${location ? ' • ' + escapeHtml(location) : ''}</span><br>
+                                    <span class="badge bg-light text-dark mt-1">${escapeHtml(type)}</span>
                                     <div class="small text-primary mt-1"><i class="bi bi-info-circle"></i> Click for more info</div>
                                 </div>
                             </div>
@@ -2019,19 +2067,48 @@
             }
         }
 
-        function showOfficerModal(name, rank) {
+        function showOfficerModalByIndex(index) {
+            const member = currentTeamMembers[index];
+            if (!member) return;
+            showOfficerModal(member);
+        }
+
+        function showOfficerModal(member) {
+            const name = member.name || 'Team Member';
+            const rank = member.rank || member.neighbourhood_role || '';
+            const bio = member.bio || member.biography || member.description || '';
+            const contactDetails = member.contact_details || {};
+            const contactItems = [];
+
+            if (member.email) contactItems.push(`<li><strong>Email:</strong> <a href="mailto:${escapeHtml(member.email)}">${escapeHtml(member.email)}</a></li>`);
+            if (member.phone) contactItems.push(`<li><strong>Phone:</strong> ${escapeHtml(member.phone)}</li>`);
+            if (contactDetails.email) contactItems.push(`<li><strong>Email:</strong> <a href="mailto:${escapeHtml(contactDetails.email)}">${escapeHtml(contactDetails.email)}</a></li>`);
+            if (contactDetails.telephone) contactItems.push(`<li><strong>Phone:</strong> ${escapeHtml(contactDetails.telephone)}</li>`);
+            if (contactDetails.mobile) contactItems.push(`<li><strong>Mobile:</strong> ${escapeHtml(contactDetails.mobile)}</li>`);
+            if (contactDetails.twitter) contactItems.push(`<li><strong>Twitter/X:</strong> ${escapeHtml(contactDetails.twitter)}</li>`);
+            if (contactDetails.facebook) contactItems.push(`<li><strong>Facebook:</strong> ${escapeHtml(contactDetails.facebook)}</li>`);
+
+            const knownKeys = new Set(['name', 'rank', 'neighbourhood_role', 'bio', 'biography', 'description', 'contact_details', 'email', 'phone']);
+            const extraDetails = Object.entries(member)
+                .filter(([key, value]) => !knownKeys.has(key) && value !== null && value !== undefined && String(value).trim() !== '')
+                .slice(0, 6)
+                .map(([key, value]) => `<li><strong>${escapeHtml(key.replace(/_/g, ' '))}:</strong> ${escapeHtml(value)}</li>`)
+                .join('');
+
             const modalHtml = `
                 <div class="modal fade" id="officer-modal" tabindex="-1">
                     <div class="modal-dialog">
                         <div class="modal-content">
                             <div class="modal-header">
-                                <h5 class="modal-title">${name}</h5>
+                                <h5 class="modal-title">${escapeHtml(name)}</h5>
                                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                             </div>
                             <div class="modal-body">
-                                <p><strong>Role:</strong> ${rank || 'Neighbourhood Policing Team'}</p>
-                                <p class="small">This is illustrative data from the UK Police open API. For official contact or current team members, please visit your local police force website or use the 101 non-emergency number.</p>
-                                <div class="alert alert-info small mb-0">In a real deployment this modal could show bio, photo, specific contact form or calendar of events.</div>
+                                ${rank ? `<p><strong>Role:</strong> ${escapeHtml(rank)}</p>` : ''}
+                                ${bio ? `<p class="small mb-3">${escapeHtml(bio)}</p>` : ''}
+                                ${contactItems.length ? `<h6 class="small text-uppercase text-muted mb-2">Contact details</h6><ul class="small mb-3 ps-3">${contactItems.join('')}</ul>` : ''}
+                                ${extraDetails ? `<h6 class="small text-uppercase text-muted mb-2">Additional details</h6><ul class="small mb-0 ps-3">${extraDetails}</ul>` : ''}
+                                ${!rank && !bio && !contactItems.length && !extraDetails ? '<p class="small text-muted mb-0">No additional profile details were provided by the open data feed for this officer.</p>' : ''}
                             </div>
                             <div class="modal-footer">
                                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -2047,26 +2124,44 @@
             modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove());
         }
 
-        // NEW: Clickable events modal (fixes "can't click Upcoming Events")
-        function showEventModal(title, date, location, description) {
+        function showEventModalByIndex(index) {
+            const eventItem = currentTeamEvents[index];
+            if (!eventItem) return;
+            showEventModal(eventItem);
+        }
+
+        function showEventModal(eventItem) {
+            const title = eventItem.title || 'Event';
+            const dateRange = formatEventDateRange(eventItem) || 'Date to be confirmed';
+            const location = formatEventAddress(eventItem.address) || 'Location to be confirmed';
+            const description = eventItem.description || 'No further details available from the open data feed.';
+            const type = eventItem.type || '';
+            const contact = eventItem.contact_details || {};
+
+            let contactHtml = '';
+            const contactRows = [];
+            if (contact.name) contactRows.push(`<li><strong>Contact:</strong> ${escapeHtml(contact.name)}</li>`);
+            if (contact.telephone) contactRows.push(`<li><strong>Phone:</strong> ${escapeHtml(contact.telephone)}</li>`);
+            if (contact.email) contactRows.push(`<li><strong>Email:</strong> <a href="mailto:${escapeHtml(contact.email)}">${escapeHtml(contact.email)}</a></li>`);
+            if (contactRows.length) {
+                contactHtml = `<h6 class="small text-uppercase text-muted mb-2">Contact details</h6><ul class="small ps-3 mb-3">${contactRows.join('')}</ul>`;
+            }
+
             const modalHtml = `
                 <div class="modal fade" id="event-modal" tabindex="-1">
                     <div class="modal-dialog">
                         <div class="modal-content">
                             <div class="modal-header">
-                                <h5 class="modal-title"><i class="bi bi-calendar-event me-2"></i>${title}</h5>
+                                <h5 class="modal-title"><i class="bi bi-calendar-event me-2"></i>${escapeHtml(title)}</h5>
                                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                             </div>
                             <div class="modal-body">
-                                <p class="mb-1"><strong>Date:</strong> ${date || 'Date to be confirmed'}</p>
-                                <p class="mb-2"><strong>Location:</strong> ${location || 'Location to be confirmed'}</p>
+                                ${type ? `<p class="mb-2"><span class="badge bg-light text-dark">${escapeHtml(type)}</span></p>` : ''}
+                                <p class="mb-1"><strong>Date:</strong> ${escapeHtml(dateRange)}</p>
+                                <p class="mb-2"><strong>Location:</strong> ${escapeHtml(location)}</p>
                                 <hr>
-                                <p class="small">${description}</p>
-                                <div class="alert alert-light small mt-3 mb-0">
-                                    <i class="bi bi-info-circle me-1"></i>
-                                    This information comes from the official data.police.uk open API. 
-                                    For the most up-to-date details or to RSVP, please check your local police force website.
-                                </div>
+                                <p class="small">${escapeHtml(description)}</p>
+                                ${contactHtml}
                             </div>
                             <div class="modal-footer">
                                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -2537,17 +2632,15 @@
             const forceSel = document.getElementById('compare-force2');
             forceSel.innerHTML = '<option value="">Select force for comparison...</option>';
             
-            // Reuse the main force list if possible, or fetch again
-            fetch('https://data.police.uk/api/forces')
-                .then(r => r.json())
-                .then(forces => {
-                    forces.forEach(f => {
-                        const opt = document.createElement('option');
-                        opt.value = f.id;
-                        opt.textContent = f.name;
-                        forceSel.appendChild(opt);
-                    });
+            // Reuse cached force list where possible.
+            getAllForces().then(forces => {
+                (forces || []).forEach(f => {
+                    const opt = document.createElement('option');
+                    opt.value = f.id;
+                    opt.textContent = f.name;
+                    forceSel.appendChild(opt);
                 });
+            });
             
             document.getElementById('comparison-results').classList.add('d-none');
             modal.show();
@@ -2561,8 +2654,8 @@
             if (!forceId) return;
             
             try {
-                const res = await fetch(`https://data.police.uk/api/${forceId}/neighbourhoods`);
-                const neighs = await res.json();
+                const neighs = await cachedFetch(`https://data.police.uk/api/${forceId}/neighbourhoods`);
+                if (!Array.isArray(neighs)) throw new Error('No neighbourhood data');
                 neighs.forEach(n => {
                     const opt = document.createElement('option');
                     opt.value = n.id;
@@ -2593,15 +2686,8 @@
                 const display2 = document.getElementById('compare-neigh2').options[document.getElementById('compare-neigh2').selectedIndex]?.text || force2;
                 
                 // Fetch crimes for area 2
-                let dateStr = '2025-04';
-                try {
-                    const last = await fetch('https://data.police.uk/api/crime-last-updated');
-                    const lj = await last.json();
-                    if (lj.date) dateStr = lj.date.substring(0,7);
-                } catch(_) {}
-                
-                const crimes2Res = await fetch(`https://data.police.uk/api/crimes-street/all-crime?lat=${center2.lat}&lng=${center2.lng}&date=${dateStr}`);
-                const crimes2 = await crimes2Res.json();
+                const dateStr = await getLatestCrimeMonth();
+                const crimes2 = await cachedFetch(`https://data.police.uk/api/crimes-street/all-crime?lat=${center2.lat}&lng=${center2.lng}&date=${dateStr}`) || [];
                 
                 const counts2 = {};
                 (crimes2 || []).forEach(c => counts2[c.category] = (counts2[c.category]||0)+1);
